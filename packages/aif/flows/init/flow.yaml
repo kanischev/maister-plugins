@@ -1,0 +1,89 @@
+schemaVersion: 1
+name: aif-init
+metadata:
+  title: "AIF — Init"
+  summary: "One-time project configuration: AIF context + architecture (no npm)."
+  labels: [setup, onboarding]
+  route_when: "One-time: project not yet AIF-initialized."
+  links:
+    - { kind: framework, title: "AI Factory 2.x", url: "https://github.com/lee-to/ai-factory/tree/2.x" }
+    - { kind: docs, title: "Configuration", url: "https://github.com/lee-to/ai-factory/blob/2.x/docs/configuration.md" }
+  sources:
+    - { component: "skills/aif-*, agents/*", origin: "github.com/lee-to/ai-factory@2.x" }
+runner_profiles:
+  claude-code:
+    capability_agent: claude
+    adapter: claude
+    model: claude-sonnet-4-6
+    provider:
+      kind: anthropic
+# M29 mutation gate (commit node) + M30 retry/session policies → engine_min >= 1.4.0.
+compat:
+  engine_min: 1.4.0
+# M30 (ADR-081): pin the engine default explicitly — one ACP session reused
+# across nodes; per-node/per-rework policies override.
+defaults:
+  session_policy: resume
+nodes:
+  - id: setup
+    type: ai_coding
+    # M30 (ADR-080): auto-retry infra failures only; the workspace rewinds to
+    # the pre-attempt checkpoint. Same policy on every ai_coding node below.
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: "/aif {{ task.prompt }}"
+    transitions:
+      success: architecture
+
+  - id: architecture
+    type: ai_coding
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: "/aif-architecture"
+    transitions:
+      success: review
+
+  - id: review
+    type: human
+    finish:
+      human:
+        role: maintainer
+        decisions: [approve]
+        commentsVar: review_comments
+    transitions:
+      approve: commit
+
+  - id: commit
+    type: ai_coding
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: "/aif-commit"
+    pre_finish:
+      gates:
+        - id: commit-gate
+          kind: command_check
+          mode: blocking
+          command: "test -z \"$(git status --porcelain --untracked-files=no)\" && git log -1 --pretty=%s | grep -Eq '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\\([^)]+\\))?!?: .+'"
+        # M29 (ADR-074): the run's WHOLE changeset is committed here (AIF
+        # defers all committing to /aif-commit), so this node's range is the
+        # full work — /aif + /aif-architecture must have written AIF context.
+        # No inputArtifacts — presence passes vacuously; only the mutation
+        # assertion gates.
+        - id: aif-config-touched
+          kind: artifact_required
+          mode: blocking
+          must_touch: [".ai-factory/**", ".claude/**"]
+          output:
+            id: init-mutation-report
+            kind: mutation_report
+    transitions:
+      success: done
