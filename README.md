@@ -19,6 +19,7 @@ packages/
 | ------- | -------- |
 | [`aif`](packages/aif/) | AI Factory workflows: 5 flows (`aif-dev`, `aif-bugfix`, `aif-evolve`, `aif-roadmap`, `aif-init`) + vendored skills/agents bundle. |
 | [`superpowers`](packages/superpowers/) | [obra/superpowers](https://github.com/obra/superpowers) methodology: 4 flows (`sp-dev`, `sp-debug`, `sp-plan`, `sp-execute`) + full vendored superpowers skills bundle. |
+| [`openspec`](packages/openspec/) | [Fission-AI/OpenSpec](https://github.com/Fission-AI/OpenSpec) spec-driven workflow: 4 flows (`os-dev`, `os-propose`, `os-apply`, `os-init`) driving the `openspec` CLI (installed by `setup.sh` / `os-init`); hybrid `cli`+`ai_coding` nodes, `requirements` launch precondition. Reference-only bundle. |
 
 (`core` — platform agents: task triager/router, GitHub intake — is planned
 and not yet created.)
@@ -30,6 +31,8 @@ Per-package reference docs and design specs live under [`docs/`](docs/):
 - [`docs/aif/`](docs/aif/) — AIF package reference.
 - [`docs/superpowers/`](docs/superpowers/) — Superpowers package reference +
   the design spec (`specs/`).
+- [`docs/openspec/`](docs/openspec/) — OpenSpec package reference + the design
+  spec (`specs/`).
 
 ## Versioning
 

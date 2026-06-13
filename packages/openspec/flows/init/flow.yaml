@@ -1,0 +1,93 @@
+schemaVersion: 1
+name: os-init
+metadata:
+  title: "OpenSpec — Init"
+  summary: "One-time: ensure the openspec CLI, scaffold OpenSpec (openspec init --tools claude) + fill project.md -> review -> commit."
+  labels: [setup, onboarding, spec-driven]
+  route_when: "One-time: project not yet OpenSpec-initialized (no openspec/ base)."
+  links:
+    - { kind: framework, title: "OpenSpec", url: "https://github.com/Fission-AI/OpenSpec" }
+  sources:
+    - { component: "capability/reference/*", origin: "npm:@fission-ai/openspec@1.4.1" }
+runner_profiles:
+  claude-code:
+    capability_agent: claude
+    adapter: claude
+    model: claude-opus-4-8
+    provider:
+      kind: anthropic
+# must_touch mutation gate -> engine_min >= 1.3.0; retry/session -> >= 1.4.0.
+compat:
+  engine_min: 1.4.0
+defaults:
+  session_policy: resume
+# os-init INSTALLS the openspec CLI, so it must NOT require it present — it
+# requires only npm (to install it). This is why `requirements` is per-flow.
+requirements:
+  - name: "npm present (to install the openspec CLI)"
+    probe: "command -v npm"
+    hint: "install Node.js (npm) on the supervisor/web host"
+nodes:
+  # Deterministic installer — a `cli` node (no agent, no permission HITL).
+  # Idempotent: installs the pinned openspec CLI only if absent.
+  - id: ensure
+    type: cli
+    action:
+      command: "command -v openspec >/dev/null 2>&1 || npm i -g @fission-ai/openspec@1.4.1"
+    transitions:
+      success: init
+
+  - id: init
+    type: ai_coding
+    settings:
+      permissionMode: allow
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        [MAIster x OpenSpec — execution contract]
+        You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree on the correct branch.
+        - Invoke OpenSpec via the `openspec` CLI directly (it was just ensured on the host). Never ask the user (AskUserQuestion is disabled); use non-interactive flags (--force).
+        - MAIster owns git + promotion: do NOT create worktrees, switch/create branches, merge, push, or open PRs.
+
+        THIS NODE — Initialize OpenSpec in this project (one-time):
+        - Scaffold it: `openspec init --tools claude --force` (writes openspec/config.yaml + .claude/commands/opsx/* + .claude/skills/openspec-*). Then refresh: `openspec update --force`.
+        - If a project brief (openspec/project.md or similar) was scaffolded, populate it with REAL project context: explore the repo (stack, build/test commands, conventions, directory structure, domain) and write an accurate brief that future OpenSpec changes will rely on. Extra context: {{ task.prompt }}
+        - Do NOT commit — the commit node finalizes. STOP after scaffolding + filling project.md; the next node is human review.
+    transitions:
+      success: review
+
+  - id: review
+    type: human
+    finish:
+      human:
+        role: maintainer
+        decisions: [approve]
+        commentsVar: review_comments
+    transitions:
+      approve: commit
+
+  # Deterministic commit — a `cli` node. init left the scaffold uncommitted, so
+  # this node's committed range is the whole openspec/ scaffold (the must_touch
+  # mutation gate asserts it).
+  - id: commit
+    type: cli
+    action:
+      command: "git add -A && git commit -m 'chore(openspec): initialize spec-driven workflow'"
+    pre_finish:
+      gates:
+        - id: openspec-touched
+          kind: artifact_required
+          mode: blocking
+          must_touch: ["openspec/**"]
+          output:
+            id: init-mutation-report
+            kind: mutation_report
+        - id: tree-clean-gate
+          kind: command_check
+          mode: blocking
+          command: "test -z \"$(git status --porcelain --untracked-files=no)\""
+    transitions:
+      success: done

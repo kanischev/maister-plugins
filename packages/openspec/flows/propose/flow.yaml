@@ -1,0 +1,91 @@
+schemaVersion: 1
+name: os-propose
+metadata:
+  title: "OpenSpec — Propose"
+  summary: "Proposal only: create + validate an OpenSpec change (proposal/design/tasks/spec deltas) -> proposal_review. No implementation."
+  labels: [planning, spec, proposal]
+  route_when: "Produce + review an OpenSpec change proposal without building it yet."
+  links:
+    - { kind: framework, title: "OpenSpec", url: "https://github.com/Fission-AI/OpenSpec" }
+  sources:
+    - { component: "capability/reference/*", origin: "npm:@fission-ai/openspec@1.4.1" }
+runner_profiles:
+  claude-code:
+    capability_agent: claude
+    adapter: claude
+    model: claude-opus-4-8
+    provider:
+      kind: anthropic
+# must_touch mutation gate -> engine_min >= 1.3.0; retry/session -> >= 1.4.0.
+compat:
+  engine_min: 1.4.0
+defaults:
+  session_policy: resume
+requirements:
+  - name: "openspec CLI present"
+    probe: "command -v openspec"
+    hint: "run the os-init flow first, or: npm i -g @fission-ai/openspec@1.4.1"
+nodes:
+  - id: propose
+    type: ai_coding
+    settings:
+      permissionMode: allow
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        [MAIster x OpenSpec — execution contract]
+        You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree on the correct branch; the project is OpenSpec-initialized (run os-init first if not).
+        - Invoke OpenSpec via the `openspec` CLI directly (not /opsx:* slash commands, not openspec-* skills). AskUserQuestion is disabled — never ask the user; derive the change name yourself; make best-judgment decisions. Use --json / --no-interactive. spec-driven schema; STOP on workspace-planning mode.
+        - MAIster owns git + promotion: commit locally only; do NOT merge/push/PR or create worktrees/branches.
+
+        THIS NODE — Propose an OpenSpec change (proposal only):
+        - Idea: {{ task.prompt }}
+        - Derive a kebab-case change name. Create it: `openspec new change "<name>"`.
+        - Build all artifacts to apply-ready: loop `openspec status --change "<name>" --json` to find `ready` artifacts; for each run `openspec instructions <artifact-id> --change "<name>" --json` and write the file to its `resolvedOutputPath` using the returned template (proposal.md, design.md, tasks.md, spec deltas under specs/), honoring context/rules. Continue until every `applyRequires` artifact is `done`. No placeholders.
+        - Validate and fix until clean: `openspec validate --changes --strict --no-interactive`.
+        - Commit the proposal locally (e.g. "docs(openspec): propose <name>"). The tracked tree MUST end clean. STOP — this is proposal-only; implementation happens later via os-apply.
+
+        Reviewer feedback from a prior proposal_review (empty on first pass):
+        {{ proposal_review_comments }}
+    pre_finish:
+      gates:
+        - id: proposal-valid-gate
+          kind: command_check
+          mode: blocking
+          command: "openspec validate --changes --strict --no-interactive"
+        - id: openspec-touched
+          kind: artifact_required
+          mode: blocking
+          must_touch: ["openspec/**"]
+          output:
+            id: propose-mutation-report
+            kind: mutation_report
+        - id: tree-clean-gate
+          kind: command_check
+          mode: blocking
+          command: "test -z \"$(git status --porcelain --untracked-files=no)\""
+    output:
+      produces:
+        - id: change-proposal
+          kind: generic_file
+    transitions:
+      success: proposal_review
+
+  - id: proposal_review
+    type: human
+    finish:
+      human:
+        role: maintainer
+        decisions: [approve, rework]
+        commentsVar: proposal_review_comments
+    transitions:
+      approve: done
+      rework: propose
+    rework:
+      allowedTargets: [propose]
+      workspacePolicies: [keep]
+      maxLoops: 3
+      commentsVar: proposal_review_comments

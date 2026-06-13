@@ -1,0 +1,30 @@
+# MAIster package manifest. Contract: docs/pv/package-management.md (MAIster
+# repo) — flows[].id MUST equal each flow.yaml `name`; paths are
+# package-root-relative; the version pin is the git tag (openspec/vX.Y.Z),
+# never a field in this file.
+#
+# NOTE: the OpenSpec CLI version this package drives (@fission-ai/openspec@1.4.1)
+# is pinned inside the flow prompts (every `npx -y @fission-ai/openspec@1.4.1`
+# call) and recorded in metadata.sources — it is independent of the package tag.
+schemaVersion: 1
+name: openspec
+metadata:
+  title: "OpenSpec"
+  summary: "Fission-AI OpenSpec spec-driven workflow (Propose -> Apply -> Archive) as MAIster flows (os-dev, os-propose, os-apply, os-init), driving the pinned openspec CLI via npx. Reference bundle only — OpenSpec ships no MAIster-materializable skills."
+  links:
+    - { kind: framework, title: "OpenSpec", url: "https://github.com/Fission-AI/OpenSpec" }
+    - { kind: docs, title: "OpenSpec on npm", url: "https://www.npmjs.com/package/@fission-ai/openspec" }
+  sources:
+    - { component: "capability/reference/* (schema templates, scaffolded claude skills+commands, config)", origin: "npm:@fission-ai/openspec@1.4.1" }
+flows:
+  - { id: os-dev, path: flows/dev }
+  - { id: os-propose, path: flows/propose }
+  - { id: os-apply, path: flows/apply }
+  - { id: os-init, path: flows/init }
+# Reference-only bundle (no skills/agents subtree → nothing is materialized into
+# the worktree). It carries OpenSpec provenance: the spec-driven schema +
+# artifact templates, and the claude skills/commands `openspec init` scaffolds.
+capabilities:
+  - { id: openspec-reference, path: capability }
+# OpenSpec is driven via its CLI (npx), not an MCP server. None shipped.
+mcps: []
