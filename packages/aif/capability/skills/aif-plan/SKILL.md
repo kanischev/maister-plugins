@@ -256,7 +256,7 @@ From the description, extract:
 Based on the parsed description, launch 1-2 Explore agents in parallel:
 
 ```
-Task(subagent_type: Explore, model: sonnet, prompt:
+Task(subagent_type: Explore, model: opus, prompt:
   "In [project root], find files and modules related to [feature domain keywords].
    Report: key directories, relevant files, existing patterns, integration points.
    Thoroughness: quick. Be concise — return a structured summary, not file contents.")
@@ -545,18 +545,18 @@ Launch 2-3 Explore agents simultaneously, each focused on a different aspect:
 
 ```
 Agent 1 — Architecture & affected modules:
-Task(subagent_type: Explore, model: sonnet, prompt:
+Task(subagent_type: Explore, model: opus, prompt:
   "Find files and modules related to [feature domain]. Map the directory structure,
    key entry points, and how modules interact. Thoroughness: medium.")
 
 Agent 2 — Existing patterns & conventions:
-Task(subagent_type: Explore, model: sonnet, prompt:
+Task(subagent_type: Explore, model: opus, prompt:
   "Find examples of similar functionality already implemented in the project.
    Show patterns for [relevant patterns: API endpoints, services, models, etc.].
    Thoroughness: medium.")
 
 Agent 3 — Dependencies & integration points (if needed):
-Task(subagent_type: Explore, model: sonnet, prompt:
+Task(subagent_type: Explore, model: opus, prompt:
   "Find all files that import/use [module/service]. Identify integration points
    and potential side effects of changes. Thoroughness: medium.")
 ```

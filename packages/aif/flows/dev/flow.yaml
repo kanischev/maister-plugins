@@ -14,7 +14,7 @@ runner_profiles:
   claude-code:
     capability_agent: claude
     adapter: claude
-    model: claude-sonnet-4-6
+    model: claude-opus-4-8
     provider:
       kind: anthropic
 # Typed artifacts → engine_min >= 1.2.0; M30 retry/session policies → >= 1.4.0.

@@ -14,7 +14,7 @@ runner_profiles:
   claude-code:
     capability_agent: claude
     adapter: claude
-    model: claude-sonnet-4-6
+    model: claude-opus-4-8
     provider:
       kind: anthropic
 # M29 mutation gate (commit node) + M30 retry/session policies → engine_min >= 1.4.0.
