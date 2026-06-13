@@ -12,6 +12,7 @@ through `maister.yaml packages[]`, pinned by a per-package git tag
 | ------- | --------- | ----- | ----------------- |
 | `aif` | [aif/](aif/README.md) | `aif-dev`, `aif-bugfix`, `aif-evolve`, `aif-roadmap`, `aif-init` | AI Factory skills + subagents (`github.com/lee-to/ai-factory@2.x`) |
 | `superpowers` | [superpowers/](superpowers/README.md) | `sp-dev`, `sp-debug`, `sp-plan`, `sp-execute` | superpowers skills, all 14 (`github.com/obra/superpowers@5.1.0`) |
+| `openspec` | [openspec/](openspec/README.md) | `os-dev`, `os-propose`, `os-apply`, `os-init` | reference-only — drives the `openspec` CLI (`@fission-ai/openspec@1.4.1`, installed by `setup.sh` / `os-init`); ADR-091 `requirements` precondition |
 
 ## What every package documents
 
