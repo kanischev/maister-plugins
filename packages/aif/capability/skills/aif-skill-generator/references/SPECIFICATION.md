@@ -43,7 +43,7 @@ description: A description of what this skill does and when to use it.
 | `user-invocable` | `false` = only model can invoke |
 | `context` | `fork` = run in subagent |
 | `agent` | Subagent type: Explore, Plan, general-purpose |
-| `model` | Model override: sonnet, opus, haiku |
+| `model` | Model override: opus, opus, haiku |
 | `hooks` | Lifecycle hooks configuration |
 
 ## Name Field Rules

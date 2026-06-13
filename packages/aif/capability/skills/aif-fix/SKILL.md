@@ -267,19 +267,19 @@ Launch 2-3 Explore agents simultaneously:
 
 ```
 Agent 1 — Locate the problem area:
-Task(subagent_type: Explore, model: sonnet, prompt:
+Task(subagent_type: Explore, model: opus, prompt:
   "Find code related to [error location / affected functionality].
    Read the relevant functions, trace the data flow.
    Thoroughness: medium.")
 
 Agent 2 — Related code & side effects:
-Task(subagent_type: Explore, model: sonnet, prompt:
+Task(subagent_type: Explore, model: opus, prompt:
   "Find all callers/consumers of [affected function/module].
    Identify what else might break or be affected.
    Thoroughness: medium.")
 
 Agent 3 — Similar past patterns (if patches exist):
-Task(subagent_type: Explore, model: sonnet, prompt:
+Task(subagent_type: Explore, model: opus, prompt:
   "Search for similar error patterns or related fixes in the codebase.
    Check git log for recent changes to [affected files].
    Thoroughness: quick.")

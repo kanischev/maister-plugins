@@ -372,7 +372,7 @@ user-invocable: true                # Optional: false = model-only
 allowed-tools: Read Write Bash(git *)  # Optional: pre-approved tools
 context: fork                       # Optional: run in subagent
 agent: Explore                      # Optional: subagent type
-model: sonnet                       # Optional: model override
+model: opus                       # Optional: model override
 license: MIT                        # Optional: license
 compatibility: Requires git, python # Optional: requirements
 metadata:                           # Optional: custom metadata

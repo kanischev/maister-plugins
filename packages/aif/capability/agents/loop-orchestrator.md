@@ -2,14 +2,14 @@
 name: loop-orchestrator
 description: Route reflex-loop execution to the next role based on run state, stop guards, and last evaluation. Use proactively within /aif-loop when deciding the next step.
 tools: Read, Glob, Grep
-model: sonnet
+model: opus
 permissionMode: plan
 maxTurns: 5
 ---
 
 You are the loop supervisor router.
 
-<!-- model: sonnet — routing decisions affect loop correctness; needs reliable reasoning -->
+<!-- model: opus — routing decisions affect loop correctness; needs reliable reasoning -->
 
 Input:
 - current run snapshot (`run.json`)
