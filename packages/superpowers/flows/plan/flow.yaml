@@ -1,0 +1,157 @@
+schemaVersion: 1
+name: sp-plan
+metadata:
+  title: "Superpowers — Plan"
+  summary: "Planning only: brainstorm -> design_review -> writing-plans -> plan_review -> commit docs. No implementation."
+  labels: [planning, design, spec]
+  route_when: "Produce a validated design spec + implementation plan, without building yet."
+  links:
+    - { kind: framework, title: "Superpowers", url: "https://github.com/obra/superpowers" }
+    - { kind: docs, title: "brainstorming + writing-plans", url: "https://github.com/obra/superpowers/tree/main/skills" }
+  sources:
+    - { component: "skills/* (all 14)", origin: "github.com/obra/superpowers@5.1.0" }
+runner_profiles:
+  claude-code:
+    capability_agent: claude
+    adapter: claude
+    model: claude-opus-4-8
+    provider:
+      kind: anthropic
+# Mutation gate (must_touch) -> engine_min >= 1.3.0; retry/session -> >= 1.4.0.
+compat:
+  engine_min: 1.4.0
+defaults:
+  session_policy: resume
+nodes:
+  - id: brainstorm
+    type: ai_coding
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      # brainstorm is the design_review rework target — design_review_comments
+      # is runner-seeded empty on the first visit.
+      prompt: |
+        [MAIster x superpowers — execution contract]
+        You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree MAIster already created on the correct branch. The superpowers skills are installed at .claude/skills/.
+        - Invoke the skill(s) named for THIS node via the Skill tool and FOLLOW THEM EXACTLY, including every sub-skill they require. Skills are rigid — never adapt away their discipline. If a skill is even slightly relevant, use it.
+        - AskUserQuestion is disabled. Never ask the user. Make the best-judgment call and record assumptions; MAIster's review gates collect corrections as rework comments. Skill steps that wait on a "human partner" are satisfied by those gates — never block inside this node.
+        - MAIster owns git + promotion: do NOT create worktrees, switch/create branches, merge, push, or open PRs. Commit locally only, conventional messages. Tool-permission prompts are handled by the platform.
+
+        THIS NODE — Design (superpowers:brainstorming):
+        Use the superpowers:brainstorming skill to turn the task into a complete, validated design spec.
+        - Task: {{ task.prompt }}
+        - Run brainstorming non-interactively: explore the codebase for context, make the best-judgment choices it would otherwise ask about, and capture them in an explicit "Assumptions & open questions" section. Do NOT use the visual companion.
+        - Write the design to docs/superpowers/specs/<today YYYY-MM-DD>-<kebab-topic>-design.md covering: problem, 2-3 approaches + chosen + why, architecture, components/interfaces, data flow, error handling, testing strategy, assumptions & open questions.
+        - STOP after writing + committing the spec — the next MAIster node turns it into a plan.
+
+        Reviewer feedback from a prior design_review (empty on first pass):
+        {{ design_review_comments }}
+    output:
+      produces:
+        - id: design-spec
+          kind: generic_file
+    transitions:
+      success: design_review
+
+  - id: design_review
+    type: human
+    finish:
+      human:
+        role: maintainer
+        decisions: [approve, rework]
+        commentsVar: design_review_comments
+    transitions:
+      approve: plan
+      rework: brainstorm
+    rework:
+      allowedTargets: [brainstorm]
+      workspacePolicies: [keep]
+      maxLoops: 3
+      commentsVar: design_review_comments
+
+  - id: plan
+    type: ai_coding
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      # plan is the plan_review rework target — plan_review_comments seeded empty
+      # on the first visit.
+      prompt: |
+        [MAIster x superpowers — execution contract]
+        You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree MAIster already created on the correct branch. The superpowers skills are installed at .claude/skills/.
+        - Invoke the skill(s) named for THIS node via the Skill tool and FOLLOW THEM EXACTLY, including every sub-skill they require. Skills are rigid — never adapt away their discipline.
+        - AskUserQuestion is disabled. Never ask the user; make best-judgment calls and record them. MAIster owns git + promotion: commit locally only; do NOT merge/push/PR or create worktrees/branches. Tool-permission prompts are handled by the platform.
+
+        THIS NODE — Plan (superpowers:writing-plans):
+        Use the superpowers:writing-plans skill to turn the approved design spec into a bite-sized, TDD-structured implementation plan.
+        - Read the approved design spec under docs/superpowers/specs/.
+        - Write the plan to docs/superpowers/plans/<today YYYY-MM-DD>-<kebab-topic>.md with the required plan header, exact file paths, complete code per step, exact test commands + expected output, frequent commits. No placeholders.
+        - Run the skill's self-review (spec coverage, placeholder scan, type consistency) and fix inline.
+        - STOP after writing + committing the plan. Do NOT offer execution choices or implement — this is a planning-only flow; execution happens later via sp-execute.
+
+        Reviewer feedback from a prior plan_review (empty on first pass):
+        {{ plan_review_comments }}
+    input:
+      requires:
+        - artifact: design-spec
+          kind: generic_file
+    output:
+      produces:
+        - id: plan-doc
+          kind: generic_file
+    transitions:
+      success: plan_review
+
+  - id: plan_review
+    type: human
+    finish:
+      human:
+        role: maintainer
+        decisions: [approve, rework]
+        commentsVar: plan_review_comments
+    transitions:
+      approve: finalize
+      rework: plan
+    rework:
+      allowedTargets: [plan]
+      workspacePolicies: [keep]
+      maxLoops: 3
+      commentsVar: plan_review_comments
+
+  - id: finalize
+    type: ai_coding
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        [MAIster x superpowers — execution contract]
+        You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree MAIster already created on the correct branch.
+        - AskUserQuestion is disabled; never ask the user. Tool-permission prompts are handled by the platform.
+
+        THIS NODE — Commit the planning artifacts:
+        - Ensure the approved spec (docs/superpowers/specs/) and plan (docs/superpowers/plans/) are committed locally with a conventional message (e.g. "docs: add <topic> design spec + implementation plan").
+        - The tracked working tree MUST end clean. Do NOT merge, push, open a PR, or remove the worktree — MAIster owns promotion.
+    pre_finish:
+      gates:
+        # The run's whole changeset is the planning docs; assert they were
+        # actually written under docs/superpowers/**. No inputArtifacts —
+        # presence passes vacuously; only the mutation assertion gates.
+        - id: planning-docs-touched
+          kind: artifact_required
+          mode: blocking
+          must_touch: ["docs/superpowers/**"]
+          output:
+            id: plan-mutation-report
+            kind: mutation_report
+        - id: tree-clean-gate
+          kind: command_check
+          mode: blocking
+          command: "test -z \"$(git status --porcelain --untracked-files=no)\""
+    transitions:
+      success: done
