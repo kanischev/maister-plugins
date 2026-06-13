@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "fields": [
+    {
+      "name": "tdd",
+      "label": "TDD discipline",
+      "type": "string",
+      "required": true,
+      "default": "strict",
+      "options": ["strict", "pragmatic"]
+    },
+    {
+      "name": "execution",
+      "label": "Execution strategy",
+      "type": "string",
+      "required": true,
+      "default": "subagent-driven",
+      "options": ["subagent-driven", "inline"]
+    }
+  ]
+}

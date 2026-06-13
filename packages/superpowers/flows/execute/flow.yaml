@@ -1,0 +1,201 @@
+schemaVersion: 1
+name: sp-execute
+metadata:
+  title: "Superpowers — Execute"
+  summary: "Execute an existing plan: executing-plans/subagent-driven + TDD -> verify -> code_review -> review -> finalize; review rework -> fix."
+  labels: [implementation, execute-plan]
+  route_when: "An approved implementation plan already exists and needs building."
+  links:
+    - { kind: framework, title: "Superpowers", url: "https://github.com/obra/superpowers" }
+    - { kind: docs, title: "executing-plans / subagent-driven-development", url: "https://github.com/obra/superpowers/tree/main/skills" }
+  sources:
+    - { component: "skills/* (all 14)", origin: "github.com/obra/superpowers@5.1.0" }
+runner_profiles:
+  claude-code:
+    capability_agent: claude
+    adapter: claude
+    model: claude-opus-4-8
+    provider:
+      kind: anthropic
+compat:
+  engine_min: 1.4.0
+defaults:
+  session_policy: resume
+verdict_calibration:
+  confidence_min: 0.7
+nodes:
+  - id: intake
+    type: form
+    settings:
+      form_schema: ./schemas/intake.json
+    transitions:
+      success: execute
+
+  - id: execute
+    type: ai_coding
+    # entry node (NOT a rework target — review rework targets `fix`), so it must
+    # not reference review_comments.
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        [MAIster x superpowers — execution contract]
+        You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree MAIster already created on the correct branch. The superpowers skills are installed at .claude/skills/.
+        - Invoke the skill(s) named for THIS node via the Skill tool and FOLLOW THEM EXACTLY, including every sub-skill they require. Skills are rigid — never adapt away their discipline. If a skill is even slightly relevant, use it.
+        - AskUserQuestion is disabled. Never ask the user. Make the best-judgment call and record assumptions; MAIster's review gate collects corrections as rework comments. Skill steps that wait on a "human partner" are satisfied by that gate — never block inside this node.
+        - MAIster owns git + promotion: do NOT create worktrees, switch/create branches, merge, push, or open PRs. Commit locally only, conventional messages. Tool-permission prompts are handled by the platform.
+
+        THIS NODE — Execute the existing plan:
+        Execution mode = {{ steps.intake.vars.execution }}.
+        - The task identifies the plan to execute: {{ task.prompt }}. Locate it under docs/superpowers/plans/ (or the path given). Review it critically FIRST; if it has critical gaps, record them in your notes and proceed with best judgment (do not silently guess past a real blocker — finish with a clear report instead).
+        - If execution mode is "subagent-driven": use superpowers:subagent-driven-development — fresh implementer subagent per task (template .claude/skills/subagent-driven-development/implementer-prompt.md) + two-stage review (spec then code-quality), looping until clean. If nested subagent dispatch is unavailable, fall back to "inline".
+        - If execution mode is "inline": use superpowers:executing-plans — execute every task in order in this session.
+        - EITHER WAY follow superpowers:test-driven-development for every task (RED -> watch fail -> GREEN -> REFACTOR). Commit after each green step (conventional messages). TDD discipline = {{ steps.intake.vars.tdd }}.
+        - STOP after all plan tasks are implemented, tested, and committed — later nodes verify, review, and finalize. Do NOT run finishing-a-development-branch and do NOT merge/push.
+    output:
+      produces:
+        - id: impl-diff
+          kind: diff
+          requiredFor: [review, merge]
+    transitions:
+      success: verify
+
+  - id: verify
+    type: ai_coding
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        [MAIster x superpowers — execution contract]
+        You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree MAIster already created on the correct branch. The superpowers skills are installed at .claude/skills/.
+        - Invoke the skill(s) named for THIS node via the Skill tool and FOLLOW THEM EXACTLY, including every sub-skill they require. AskUserQuestion is disabled; never ask the user. Commit locally only; do NOT merge/push/PR or create worktrees/branches. Tool-permission prompts are handled by the platform.
+
+        THIS NODE — Verify (superpowers:verification-before-completion):
+        Use the superpowers:verification-before-completion skill to PROVE the implementation works — evidence before claims.
+        - RUN the project's full verification with fresh, complete commands (auto-detect the stack: pnpm/npm test + lint + typecheck + build, cargo test, pytest, go test ./..., etc.). Read full output, count failures, check exit codes.
+        - Write a concise verification report (commands + results + pass/fail) to your output.
+        - If verification fails, treat it as a bug: superpowers:systematic-debugging + superpowers:test-driven-development, re-run until green. Commit fixes locally.
+    input:
+      requires:
+        - artifact: impl-diff
+          kind: diff
+    output:
+      produces:
+        - id: sp-gate-result
+          kind: test_report
+    transitions:
+      success: code_review
+
+  - id: code_review
+    type: ai_coding
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        [MAIster x superpowers — execution contract]
+        You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree MAIster already created on the correct branch. The superpowers skills are installed at .claude/skills/.
+        - Invoke the skill(s) named for THIS node via the Skill tool and FOLLOW THEM EXACTLY. AskUserQuestion is disabled; never ask the user. Commit locally only; do NOT merge/push/PR. Tool-permission prompts are handled by the platform.
+
+        THIS NODE — Code review (superpowers:requesting-code-review):
+        Use the superpowers:requesting-code-review skill to independently review the implementation against the plan.
+        - Range: BASE = the run's base commit, HEAD = current commit.
+        - If nested subagent dispatch is available (Task tool), dispatch a code-reviewer subagent with .claude/skills/requesting-code-review/code-reviewer.md; otherwise perform the review yourself with that exact rubric (read the diff fresh).
+        - Emit the machine verdict as a single JSON object on its own line:
+          {"verdict":"pass"|"fail","confidence":0-1,"reasons":[...],"issues":[{"severity":"critical"|"important"|"minor","file":"...","note":"..."}]}
+        - Also write the full human-readable review (Strengths / Issues by severity / Assessment) to your output.
+    input:
+      requires:
+        - artifact: impl-diff
+          kind: diff
+    output:
+      produces:
+        - id: ai-judgment
+          kind: ai_judgment
+    transitions:
+      success: review
+
+  - id: review
+    type: human
+    input:
+      requires:
+        - artifact: ai-judgment
+          kind: ai_judgment
+    pre_finish:
+      gates:
+        - id: impl-diff-required
+          kind: artifact_required
+          mode: blocking
+          inputArtifacts: [impl-diff]
+        - id: ai-quality-advisory
+          kind: ai_judgment
+          mode: advisory
+          prompt: >
+            Assess the implementation diff against the approved plan and the
+            task. Reply with a JSON object:
+            {"verdict":"pass"|"fail","confidence":0-1,"reasons":[...]}
+    finish:
+      human:
+        role: maintainer
+        decisions: [approve, rework, takeover]
+        commentsVar: review_comments
+    transitions:
+      approve: finalize
+      rework: fix
+      takeover: verify
+    rework:
+      allowedTargets: [fix]
+      workspacePolicies: [keep, rewind-to-node-checkpoint]
+      maxLoops: 3
+      commentsVar: review_comments
+
+  - id: fix
+    type: ai_coding
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        [MAIster x superpowers — execution contract]
+        You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree MAIster already created on the correct branch. The superpowers skills are installed at .claude/skills/.
+        - Invoke the skill(s) named for THIS node via the Skill tool and FOLLOW THEM EXACTLY, including every sub-skill they require. AskUserQuestion is disabled; never ask the user. Commit locally only; do NOT merge/push/PR. Tool-permission prompts are handled by the platform.
+
+        THIS NODE — Address review feedback (superpowers:receiving-code-review):
+        Use the superpowers:receiving-code-review skill to act on the reviewer's feedback with technical rigor (verify before implementing; push back in your notes if an item is wrong; no performative agreement).
+        Reviewer feedback:
+        {{ review_comments }}
+        - Implement valid items one at a time, testing each. For any bug use superpowers:systematic-debugging + superpowers:test-driven-development.
+        - Commit fixes locally with conventional messages. Do NOT merge/push.
+    transitions:
+      success: verify
+
+  - id: finalize
+    type: ai_coding
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        [MAIster x superpowers — execution contract]
+        You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree MAIster already created on the correct branch.
+        - AskUserQuestion is disabled; never ask the user. Tool-permission prompts are handled by the platform.
+
+        THIS NODE — Finalize (superpowers:finishing-a-development-branch, MAIster-neutralized):
+        - Run the project's full verification one final time (superpowers:verification-before-completion) and confirm it passes with fresh evidence.
+        - Ensure ALL work is committed: commit any tracked changes locally with a conventional message. The tree MUST be clean.
+        - Then STOP — the skill's "Keep as-is" path. Do NOT merge, push, open a PR, present options, or remove the worktree. MAIster owns promotion.
+    pre_finish:
+      gates:
+        - id: tree-clean-gate
+          kind: command_check
+          mode: blocking
+          command: "test -z \"$(git status --porcelain --untracked-files=no)\""
+    transitions:
+      success: done

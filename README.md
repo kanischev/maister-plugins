@@ -18,9 +18,18 @@ packages/
 | Package | Contents |
 | ------- | -------- |
 | [`aif`](packages/aif/) | AI Factory workflows: 5 flows (`aif-dev`, `aif-bugfix`, `aif-evolve`, `aif-roadmap`, `aif-init`) + vendored skills/agents bundle. |
+| [`superpowers`](packages/superpowers/) | [obra/superpowers](https://github.com/obra/superpowers) methodology: 4 flows (`sp-dev`, `sp-debug`, `sp-plan`, `sp-execute`) + full vendored superpowers skills bundle. |
 
 (`core` — platform agents: task triager/router, GitHub intake — is planned
 and not yet created.)
+
+## Documentation
+
+Per-package reference docs and design specs live under [`docs/`](docs/):
+
+- [`docs/aif/`](docs/aif/) — AIF package reference.
+- [`docs/superpowers/`](docs/superpowers/) — Superpowers package reference +
+  the design spec (`specs/`).
 
 ## Versioning
 
