@@ -1,0 +1,28 @@
+# MAIster package manifest. Contract: docs/pv/package-management.md (MAIster
+# repo) — flows[].id MUST equal each flow.yaml `name`; paths are
+# package-root-relative; the version pin is the git tag (bmad-cis/vX.Y.Z), never
+# a field in this file.
+#
+# NOTE: the upstream BMAD Creative Intelligence Suite version this package
+# vendors (v0.2.1) is recorded in metadata.sources and the README — independent
+# of this package's own git tag.
+schemaVersion: 1
+name: bmad-cis
+metadata:
+  title: "BMAD Method — Creative Intelligence Suite (CIS)"
+  summary: "BMAD Creative Intelligence Suite as MAIster platform agents + a creative discovery flow. Six creative personas (Sophia/Storyteller, Maya/Design-Thinking, Carson/Brainstorming, Dr. Quinn/Problem-Solver, Victor/Innovation, Caravaggio/Presentation). The cis-discovery flow runs a multi-persona phase-0 (frame -> ideate -> synthesize brief) whose output feeds bmm-plan."
+  links:
+    - { kind: framework, title: "BMAD Creative Intelligence Suite", url: "https://github.com/bmad-code-org/bmad-module-creative-intelligence-suite" }
+  sources:
+    - { component: "capability/skills/bmad-cis-{design-thinking,innovation-strategy,problem-solving,storytelling} + agents/* (personas derived from src/skills/bmad-cis-agent-* customize.toml)", origin: "github.com/bmad-code-org/bmad-module-creative-intelligence-suite@v0.2.1" }
+    - { component: "capability/reference/LICENSE.bmad", origin: "github.com/bmad-code-org/bmad-module-creative-intelligence-suite@v0.2.1 (MIT, © BMad Code, LLC)" }
+flows:
+  - { id: cis-discovery, path: flows/discovery }
+# The whole capability/ subtree ships; only capability/skills/ is materialized
+# into the run worktree's .claude/ (capability/reference/* is provenance only).
+# The 6 personas live at the package-root agents/ dir, auto-scanned into the
+# catalog. Carson + Caravaggio have no vendored workflow skill (method lives in
+# their persona body); they are standalone-only in v1.
+capabilities:
+  - { id: cis-bundle, path: capability }
+mcps: []
