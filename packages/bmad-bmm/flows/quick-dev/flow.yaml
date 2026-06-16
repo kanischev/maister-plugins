@@ -1,0 +1,109 @@
+schemaVersion: 1
+name: bmm-quick-dev
+metadata:
+  title: "BMAD — Quick Dev"
+  summary: "Amelia's unified quick flow for small changes: clarify intent -> plan -> implement test-first -> self-review -> present, in one ai_coding node, then a human review gate (approve/rework). For work too small to warrant the full bmm-dev-story story cycle."
+  labels: [implementation, quick, dev, bmad]
+  route_when: "Implement a small, well-scoped change end-to-end without the full story workflow."
+  links:
+    - { kind: framework, title: "BMAD Method", url: "https://github.com/bmad-code-org/BMAD-METHOD" }
+  sources:
+    - { component: "capability/skills/bmad-quick-dev", origin: "github.com/bmad-code-org/BMAD-METHOD@v6.8.0" }
+runner_profiles:
+  claude-code:
+    capability_agent: claude
+    adapter: claude
+    model: claude-opus-4-8
+    provider:
+      kind: anthropic
+compat:
+  engine_min: 1.5.0
+defaults:
+  session_policy: resume
+verdict_calibration:
+  confidence_min: 0.7
+nodes:
+  - id: substrate
+    type: cli
+    action:
+      command: |
+        set -e
+        mkdir -p _bmad/bmm docs/planning-artifacts docs/implementation-artifacts
+        if [ ! -f _bmad/bmm/config.yaml ]; then
+          printf '%s\n' \
+            'project_name: "{{ run.projectSlug }}"' \
+            'user_name: "MAIster"' \
+            'communication_language: "English"' \
+            'document_output_language: "English"' \
+            'user_skill_level: "expert"' \
+            'output_folder: "_bmad-output"' \
+            'planning_artifacts: "docs/planning-artifacts"' \
+            'implementation_artifacts: "docs/implementation-artifacts"' \
+            'project_knowledge: "docs"' \
+            > _bmad/bmm/config.yaml
+        fi
+        echo "[bmm substrate] _bmad/bmm/config.yaml ready"
+    transitions:
+      success: quick
+
+  - id: quick
+    type: ai_coding
+    settings:
+      agent: bmad-bmm:amelia-dev
+      permissionMode: allow
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        [MAIster x BMAD — execution contract]
+        You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree on the correct branch. AskUserQuestion is DISABLED — never ask the user; make best-judgment decisions; corrections arrive via the HITL review gate. MAIster owns git + promotion: commit locally only; do NOT create worktrees/branches, merge, push, or open PRs. Inside any BMad skill, IGNORE the "On Activation / greet / present menu / STOP and wait for input" steps — execute the skill's <workflow> body directly. Load config from _bmad/bmm/config.yaml.
+
+        THIS NODE — Quick end-to-end change:
+        - Task: {{ task.prompt }}
+        - Drive the `bmad-quick-dev` skill autonomously: clarify intent from the task, plan minimally, implement test-first (keep the project's own test suite green — discover and run its test command yourself), and self-review. No placeholders.
+        - Commit locally with conventional messages. STOP when implemented + committed — the next node reviews the diff.
+
+        Reviewer feedback from a prior review (empty on first pass):
+        {{ review_comments }}
+    output:
+      produces:
+        - id: impl-diff
+          kind: diff
+          requiredFor: [review, merge]
+    transitions:
+      success: review
+
+  - id: review
+    type: human
+    input:
+      requires:
+        - artifact: impl-diff
+          kind: diff
+    pre_finish:
+      gates:
+        - id: impl-diff-required
+          kind: artifact_required
+          mode: blocking
+          inputArtifacts: [impl-diff]
+        - id: review-quality-advisory
+          kind: ai_judgment
+          mode: advisory
+          prompt: >
+            Assess the implementation diff against the task intent. Reply with a
+            JSON object:
+            {"verdict":"pass"|"fail","confidence":0-1,"reasons":[...]}
+    finish:
+      human:
+        role: maintainer
+        decisions: [approve, rework]
+        commentsVar: review_comments
+    transitions:
+      approve: done
+      rework: quick
+    rework:
+      allowedTargets: [quick]
+      workspacePolicies: [keep, rewind-to-node-checkpoint]
+      maxLoops: 3
+      commentsVar: review_comments
