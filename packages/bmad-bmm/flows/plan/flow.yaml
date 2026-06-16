@@ -1,0 +1,308 @@
+schemaVersion: 1
+name: bmm-plan
+metadata:
+  title: "BMAD — Plan (greenfield SDLC)"
+  summary: "BMad Method planning spine: product brief (Mary) -> PRD (John) -> UX (Sally) -> architecture (Winston) -> epics+stories (Winston) -> implementation-readiness. Human review gates after the brief, PRD, and architecture; doc-production enforced by command_check gates."
+  labels: [planning, prd, architecture, greenfield, bmad]
+  route_when: "Plan a new feature/product end-to-end (brief -> PRD -> architecture -> epics) before any code."
+  links:
+    - { kind: framework, title: "BMAD Method", url: "https://github.com/bmad-code-org/BMAD-METHOD" }
+  sources:
+    - { component: "capability/skills/bmad-{product-brief,prd,ux,create-architecture,create-epics-and-stories,check-implementation-readiness}", origin: "github.com/bmad-code-org/BMAD-METHOD@v6.8.0" }
+runner_profiles:
+  claude-code:
+    capability_agent: claude
+    adapter: claude
+    model: claude-opus-4-8
+    provider:
+      kind: anthropic
+# settings.agent binding (M34) -> engine_min >= 1.5.0; typed artifacts (1.2.0),
+# retry/session policies (1.4.0) are all covered by the 1.5.0 floor.
+compat:
+  engine_min: 1.5.0
+defaults:
+  session_policy: resume
+verdict_calibration:
+  confidence_min: 0.7
+nodes:
+  # Deterministic mini-substrate: write _bmad/bmm/config.yaml (idempotent) so the
+  # vendored BMad skills can load their config. A cli node runs `bash -c` in the
+  # worktree (cwd = worktreePath) — no agent, no permission HITL. project_name is
+  # Mustache-rendered before bash runs.
+  - id: substrate
+    type: cli
+    action:
+      command: |
+        set -e
+        mkdir -p _bmad/bmm docs/planning-artifacts docs/implementation-artifacts
+        if [ ! -f _bmad/bmm/config.yaml ]; then
+          printf '%s\n' \
+            'project_name: "{{ run.projectSlug }}"' \
+            'user_name: "MAIster"' \
+            'communication_language: "English"' \
+            'document_output_language: "English"' \
+            'user_skill_level: "expert"' \
+            'output_folder: "_bmad-output"' \
+            'planning_artifacts: "docs/planning-artifacts"' \
+            'implementation_artifacts: "docs/implementation-artifacts"' \
+            'project_knowledge: "docs"' \
+            > _bmad/bmm/config.yaml
+        fi
+        echo "[bmm substrate] _bmad/bmm/config.yaml ready"
+    transitions:
+      success: brief
+
+  - id: brief
+    type: ai_coding
+    settings:
+      agent: bmad-bmm:mary-analyst
+      permissionMode: allow
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        [MAIster x BMAD — execution contract]
+        You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree on the correct branch. AskUserQuestion is DISABLED — never ask the user; make best-judgment decisions; corrections arrive via the HITL review gates. MAIster owns git + promotion: commit locally only; do NOT create worktrees/branches, merge, push, or open PRs. Inside any BMad skill, IGNORE the "On Activation / greet / present menu / STOP and wait for input" steps — execute the skill's <workflow> body directly. Load config from _bmad/bmm/config.yaml.
+
+        THIS NODE — Produce the product brief:
+        - Idea / task: {{ task.prompt }}
+        - Drive the `bmad-product-brief` skill autonomously to write a complete product brief under docs/planning-artifacts/ (e.g. brief.md). Ground every claim; no placeholders.
+        - Commit the brief locally (e.g. "docs(bmad): product brief"). STOP after the brief — the next node reviews it.
+
+        Reviewer feedback from a prior brief_review (empty on first pass):
+        {{ brief_comments }}
+    pre_finish:
+      gates:
+        - id: brief-written
+          kind: command_check
+          mode: blocking
+          command: "test -n \"$(find docs/planning-artifacts -iname '*brief*.md' -size +0c 2>/dev/null)\""
+    output:
+      produces:
+        - id: product-brief
+          kind: generic_file
+    transitions:
+      success: brief_review
+
+  - id: brief_review
+    type: human
+    finish:
+      human:
+        role: maintainer
+        decisions: [approve, rework]
+        commentsVar: brief_comments
+    transitions:
+      approve: prd
+      rework: brief
+    rework:
+      allowedTargets: [brief]
+      workspacePolicies: [keep]
+      maxLoops: 3
+      commentsVar: brief_comments
+
+  - id: prd
+    type: ai_coding
+    settings:
+      agent: bmad-bmm:john-pm
+      permissionMode: allow
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        [MAIster x BMAD — execution contract]
+        You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree. AskUserQuestion is DISABLED — never ask the user; corrections arrive via the HITL review gates. Commit locally only; do NOT merge/push/PR. Inside any BMad skill, skip its activation/greet/menu steps and execute the <workflow> body. Load config from _bmad/bmm/config.yaml.
+
+        THIS NODE — Produce the PRD from the approved brief:
+        - Read the product brief under docs/planning-artifacts/. Drive the `bmad-prd` skill autonomously to create a complete PRD (functional + non-functional requirements, goals, scope) under docs/planning-artifacts/prd.md. No placeholders.
+        - Commit locally (e.g. "docs(bmad): PRD"). STOP after the PRD — the next node reviews it.
+
+        Reviewer feedback from a prior prd_review (empty on first pass):
+        {{ prd_comments }}
+    input:
+      requires:
+        - artifact: product-brief
+          kind: generic_file
+    pre_finish:
+      gates:
+        - id: prd-written
+          kind: command_check
+          mode: blocking
+          command: "test -n \"$(find docs/planning-artifacts -iname '*prd*.md' -size +0c 2>/dev/null)\""
+    output:
+      produces:
+        - id: prd-doc
+          kind: generic_file
+    transitions:
+      success: prd_review
+
+  - id: prd_review
+    type: human
+    finish:
+      human:
+        role: maintainer
+        decisions: [approve, rework]
+        commentsVar: prd_comments
+    transitions:
+      approve: ux
+      rework: prd
+    rework:
+      allowedTargets: [prd]
+      workspacePolicies: [keep]
+      maxLoops: 3
+      commentsVar: prd_comments
+
+  - id: ux
+    type: ai_coding
+    settings:
+      agent: bmad-bmm:sally-ux
+      permissionMode: allow
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        [MAIster x BMAD — execution contract]
+        You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree. AskUserQuestion is DISABLED — never ask the user. Commit locally only; do NOT merge/push/PR. Inside any BMad skill, skip its activation/greet/menu steps and execute the <workflow> body. Load config from _bmad/bmm/config.yaml.
+
+        THIS NODE — Produce the UX design spec:
+        - Read the PRD under docs/planning-artifacts/. Drive the `bmad-ux` skill autonomously to write a UX design spec under docs/planning-artifacts/ (e.g. ux.md).
+        - If the PRD has no meaningful user-facing surface, write a short "ux.md" recording "No UX surface — skipped" instead of inventing one.
+        - Commit locally (e.g. "docs(bmad): UX spec").
+    input:
+      requires:
+        - artifact: prd-doc
+          kind: generic_file
+    output:
+      produces:
+        - id: ux-doc
+          kind: generic_file
+    transitions:
+      success: architecture
+
+  - id: architecture
+    type: ai_coding
+    settings:
+      agent: bmad-bmm:winston-architect
+      permissionMode: allow
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        [MAIster x BMAD — execution contract]
+        You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree. AskUserQuestion is DISABLED — never ask the user; corrections arrive via the HITL review gates. Commit locally only; do NOT merge/push/PR. Inside any BMad skill, skip its activation/greet/menu steps and execute the <workflow> body. Load config from _bmad/bmm/config.yaml.
+
+        THIS NODE — Produce the architecture from the PRD (and UX):
+        - Read the PRD and UX spec under docs/planning-artifacts/. Drive the `bmad-create-architecture` skill autonomously to write a complete architecture document under docs/planning-artifacts/architecture.md (stack, structure, decisions with trade-offs). No placeholders.
+        - Commit locally (e.g. "docs(bmad): architecture"). STOP after the architecture — the next node reviews it.
+
+        Reviewer feedback from a prior arch_review (empty on first pass):
+        {{ arch_comments }}
+    input:
+      requires:
+        - artifact: prd-doc
+          kind: generic_file
+    pre_finish:
+      gates:
+        - id: architecture-written
+          kind: command_check
+          mode: blocking
+          command: "test -n \"$(find docs/planning-artifacts -iname '*architecture*.md' -size +0c 2>/dev/null)\""
+    output:
+      produces:
+        - id: architecture-doc
+          kind: generic_file
+    transitions:
+      success: arch_review
+
+  - id: arch_review
+    type: human
+    finish:
+      human:
+        role: maintainer
+        decisions: [approve, rework]
+        commentsVar: arch_comments
+    transitions:
+      approve: epics
+      rework: architecture
+    rework:
+      allowedTargets: [architecture]
+      workspacePolicies: [keep]
+      maxLoops: 3
+      commentsVar: arch_comments
+
+  - id: epics
+    type: ai_coding
+    settings:
+      agent: bmad-bmm:winston-architect
+      permissionMode: allow
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        [MAIster x BMAD — execution contract]
+        You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree. AskUserQuestion is DISABLED — never ask the user. Commit locally only; do NOT merge/push/PR. Inside any BMad skill, skip its activation/greet/menu steps and execute the <workflow> body. Load config from _bmad/bmm/config.yaml.
+
+        THIS NODE — Produce the epics + stories breakdown:
+        - Read the PRD, UX, and architecture under docs/planning-artifacts/. Drive the `bmad-create-epics-and-stories` skill autonomously to write docs/planning-artifacts/epics.md (epics with BDD-formatted stories and source hints) and initialize docs/implementation-artifacts/sprint-status.yaml.
+        - Commit locally (e.g. "docs(bmad): epics and stories").
+    input:
+      requires:
+        - artifact: architecture-doc
+          kind: generic_file
+    pre_finish:
+      gates:
+        - id: epics-written
+          kind: command_check
+          mode: blocking
+          command: "test -n \"$(find docs/planning-artifacts -iname '*epic*.md' -size +0c 2>/dev/null)\""
+    output:
+      produces:
+        - id: epics-doc
+          kind: generic_file
+    transitions:
+      success: readiness
+
+  - id: readiness
+    type: ai_coding
+    settings:
+      agent: bmad-bmm:winston-architect
+      permissionMode: allow
+    action:
+      prompt: |
+        [MAIster x BMAD — execution contract]
+        You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree. AskUserQuestion is DISABLED — never ask the user. Commit locally only; do NOT merge/push/PR. Inside any BMad skill, skip its activation/greet/menu steps and execute the <workflow> body. Load config from _bmad/bmm/config.yaml.
+
+        THIS NODE — Implementation-readiness assessment:
+        - Drive the `bmad-check-implementation-readiness` skill autonomously to verify the PRD, UX, architecture, and epics under docs/planning-artifacts/ are aligned and implementation-ready. Fix small gaps in the planning docs where safe and commit them.
+        - Emit the machine verdict as a single JSON object on its own line:
+          {"verdict":"pass"|"fail","confidence":0-1,"reasons":[...]}
+        - Also write the full readiness assessment to your output.
+    input:
+      requires:
+        - artifact: epics-doc
+          kind: generic_file
+    pre_finish:
+      gates:
+        - id: readiness-judgment
+          kind: ai_judgment
+          mode: blocking
+          prompt: >
+            Assess whether the planning artifacts under docs/planning-artifacts/
+            (PRD, UX, architecture, epics) are mutually aligned and ready for
+            implementation. Reply with a JSON object:
+            {"verdict":"pass"|"fail","confidence":0-1,"reasons":[...]}
+    output:
+      produces:
+        - id: readiness-judgment
+          kind: ai_judgment
+    transitions:
+      success: done

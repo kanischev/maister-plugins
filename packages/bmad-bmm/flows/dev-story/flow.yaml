@@ -1,0 +1,212 @@
+schemaVersion: 1
+name: bmm-dev-story
+metadata:
+  title: "BMAD — Dev Story (SM → Dev → review)"
+  summary: "BMad Method implementation loop driven by Amelia: prepare a context-rich story -> human approve -> implement test-first -> code review -> human review (approve/rework/takeover). Bounded rework loop; the dev-story checklist + ai_judgment + human review are the quality gates (the project's own test command is run inside the skill, not hardcoded here)."
+  labels: [implementation, story, dev, tdd, bmad]
+  route_when: "Implement the next (or a specified) story end-to-end with test-first discipline and review."
+  links:
+    - { kind: framework, title: "BMAD Method", url: "https://github.com/bmad-code-org/BMAD-METHOD" }
+  sources:
+    - { component: "capability/skills/bmad-{create-story,dev-story,code-review}", origin: "github.com/bmad-code-org/BMAD-METHOD@v6.8.0" }
+runner_profiles:
+  claude-code:
+    capability_agent: claude
+    adapter: claude
+    model: claude-opus-4-8
+    provider:
+      kind: anthropic
+compat:
+  engine_min: 1.5.0
+defaults:
+  session_policy: resume
+verdict_calibration:
+  confidence_min: 0.7
+nodes:
+  - id: substrate
+    type: cli
+    action:
+      command: |
+        set -e
+        mkdir -p _bmad/bmm docs/planning-artifacts docs/implementation-artifacts
+        if [ ! -f _bmad/bmm/config.yaml ]; then
+          printf '%s\n' \
+            'project_name: "{{ run.projectSlug }}"' \
+            'user_name: "MAIster"' \
+            'communication_language: "English"' \
+            'document_output_language: "English"' \
+            'user_skill_level: "expert"' \
+            'output_folder: "_bmad-output"' \
+            'planning_artifacts: "docs/planning-artifacts"' \
+            'implementation_artifacts: "docs/implementation-artifacts"' \
+            'project_knowledge: "docs"' \
+            > _bmad/bmm/config.yaml
+        fi
+        echo "[bmm substrate] _bmad/bmm/config.yaml ready"
+    transitions:
+      success: create_story
+
+  - id: create_story
+    type: ai_coding
+    settings:
+      agent: bmad-bmm:amelia-dev
+      permissionMode: allow
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        [MAIster x BMAD — execution contract]
+        You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree on the correct branch. AskUserQuestion is DISABLED — never ask the user; make best-judgment decisions; corrections arrive via the HITL review gates. MAIster owns git + promotion: commit locally only; do NOT create worktrees/branches, merge, push, or open PRs. Inside any BMad skill, IGNORE the "On Activation / greet / present menu / STOP and wait for input" steps — execute the skill's <workflow> body directly. Load config from _bmad/bmm/config.yaml.
+
+        THIS NODE — Prepare a context-rich story for implementation:
+        - Story intent / task: {{ task.prompt }}
+        - Drive the `bmad-create-story` skill autonomously. If planning artifacts exist under docs/planning-artifacts/ (epics.md, prd.md, architecture.md), select/derive the target story from them and exhaustively extract dev context. If they are absent, create a single self-contained story directly from the task intent. Write the story file under docs/implementation-artifacts/ and update sprint-status.yaml if present.
+        - Commit locally (e.g. "docs(bmad): story <key>"). STOP after the story — the next node reviews it.
+
+        Reviewer feedback from a prior story_review (empty on first pass):
+        {{ story_comments }}
+    pre_finish:
+      gates:
+        - id: story-written
+          kind: command_check
+          mode: blocking
+          command: "test -n \"$(find docs/implementation-artifacts -iname '*.md' -size +0c 2>/dev/null)\""
+    output:
+      produces:
+        - id: story-doc
+          kind: generic_file
+    transitions:
+      success: story_review
+
+  - id: story_review
+    type: human
+    finish:
+      human:
+        role: maintainer
+        decisions: [approve, rework]
+        commentsVar: story_comments
+    transitions:
+      approve: dev
+      rework: create_story
+    rework:
+      allowedTargets: [create_story]
+      workspacePolicies: [keep]
+      maxLoops: 3
+      commentsVar: story_comments
+
+  - id: dev
+    type: ai_coding
+    settings:
+      agent: bmad-bmm:amelia-dev
+      permissionMode: allow
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        [MAIster x BMAD — execution contract]
+        You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree. AskUserQuestion is DISABLED — never ask the user; corrections arrive via the HITL review gates. Commit locally only; do NOT merge/push/PR. Inside any BMad skill, skip its activation/greet/menu steps and execute the <workflow> body. Load config from _bmad/bmm/config.yaml.
+
+        THIS NODE — Implement the approved story test-first:
+        - Read the approved story under docs/implementation-artifacts/. Drive the `bmad-dev-story` skill autonomously: implement each task in sequence with red→green→refactor discipline, keep the project's own test suite green (discover and run the project's test command yourself — it is NOT provided here), and check off acceptance criteria only when truly satisfied. Honor the story's dev notes and the `bmad-dev-story` checklist (definition of done).
+        - Commit progress locally with conventional messages. STOP when the story is fully implemented and committed — the next node reviews the diff.
+    input:
+      requires:
+        - artifact: story-doc
+          kind: generic_file
+    output:
+      produces:
+        - id: impl-diff
+          kind: diff
+          requiredFor: [review, merge]
+    transitions:
+      success: code_review
+
+  - id: code_review
+    type: ai_coding
+    settings:
+      agent: bmad-bmm:amelia-dev
+      permissionMode: allow
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        [MAIster x BMAD — execution contract]
+        You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree. AskUserQuestion is DISABLED — never ask the user. Commit locally only; do NOT merge/push/PR. Inside any BMad skill, skip its activation/greet/menu steps and execute the <workflow> body. Load config from _bmad/bmm/config.yaml.
+
+        THIS NODE — Code review across quality facets:
+        - Drive the `bmad-code-review` skill over the implementation diff against the approved story. Range: BASE = the run's base commit, HEAD = current. Verify acceptance criteria are actually implemented (not just checked off), tests are real and pass, and no regressions.
+        - Emit the machine verdict as a single JSON object on its own line for the downstream gate:
+          {"verdict":"pass"|"fail","confidence":0-1,"reasons":[...],"issues":[{"severity":"critical"|"important"|"minor","file":"...","note":"..."}]}
+        - Also write the full human-readable review (Strengths / Issues by severity / Assessment) to your output.
+    input:
+      requires:
+        - artifact: impl-diff
+          kind: diff
+    output:
+      produces:
+        - id: review-judgment
+          kind: ai_judgment
+    transitions:
+      success: review
+
+  - id: review
+    type: human
+    input:
+      requires:
+        - artifact: review-judgment
+          kind: ai_judgment
+    pre_finish:
+      gates:
+        - id: impl-diff-required
+          kind: artifact_required
+          mode: blocking
+          inputArtifacts: [impl-diff]
+        - id: review-quality-advisory
+          kind: ai_judgment
+          mode: advisory
+          prompt: >
+            Assess the implementation diff against the approved story and its
+            acceptance criteria. Reply with a JSON object:
+            {"verdict":"pass"|"fail","confidence":0-1,"reasons":[...]}
+    finish:
+      human:
+        role: maintainer
+        decisions: [approve, rework, takeover]
+        commentsVar: review_comments
+    transitions:
+      approve: done
+      rework: fix
+      takeover: code_review
+    rework:
+      allowedTargets: [fix]
+      workspacePolicies: [keep, rewind-to-node-checkpoint]
+      maxLoops: 3
+      commentsVar: review_comments
+
+  - id: fix
+    type: ai_coding
+    settings:
+      agent: bmad-bmm:amelia-dev
+      permissionMode: allow
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        [MAIster x BMAD — execution contract]
+        You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree. AskUserQuestion is DISABLED — never ask the user. Commit locally only; do NOT merge/push/PR. Inside any BMad skill, skip its activation/greet/menu steps and execute the <workflow> body. Load config from _bmad/bmm/config.yaml.
+
+        THIS NODE — Address review feedback (technical rigor, not performative agreement):
+        Reviewer feedback:
+        {{ review_comments }}
+        - Evaluate each item against the codebase; push back in your notes if an item is wrong, but address valid items one at a time, testing each (keep the project's test suite green). Update the story's task checkboxes and dev notes as you go.
+        - Commit fixes locally with conventional messages. Do NOT merge/push.
+    transitions:
+      success: code_review
