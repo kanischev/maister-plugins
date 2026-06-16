@@ -1,0 +1,154 @@
+schemaVersion: 1
+name: cis-discovery
+metadata:
+  title: "CIS — Discovery (creative phase-0)"
+  summary: "Multi-persona creative discovery feeding the SDLC: Dr. Quinn frames the problem (systematic problem-solving) -> Maya ideates human-centered concepts (design thinking) -> Victor assesses innovation value and writes a discovery brief (innovation strategy) -> human review. The brief lands in docs/planning-artifacts/ so bmm-plan can consume it."
+  labels: [discovery, ideation, creative, phase-0, cis, bmad]
+  route_when: "Explore a fuzzy problem/opportunity before planning: frame -> ideate -> assess -> discovery brief."
+  links:
+    - { kind: framework, title: "BMAD Creative Intelligence Suite", url: "https://github.com/bmad-code-org/bmad-module-creative-intelligence-suite" }
+  sources:
+    - { component: "capability/skills/bmad-cis-{problem-solving,design-thinking,innovation-strategy}", origin: "github.com/bmad-code-org/bmad-module-creative-intelligence-suite@v0.2.1" }
+runner_profiles:
+  claude-code:
+    capability_agent: claude
+    adapter: claude
+    model: claude-opus-4-8
+    provider:
+      kind: anthropic
+compat:
+  engine_min: 1.5.0
+defaults:
+  session_policy: resume
+verdict_calibration:
+  confidence_min: 0.7
+nodes:
+  - id: substrate
+    type: cli
+    action:
+      command: |
+        set -e
+        mkdir -p _bmad/cis docs/planning-artifacts docs/discovery
+        if [ ! -f _bmad/cis/config.yaml ]; then
+          printf '%s\n' \
+            'project_name: "{{ run.projectSlug }}"' \
+            'user_name: "MAIster"' \
+            'communication_language: "English"' \
+            'document_output_language: "English"' \
+            'output_folder: "docs"' \
+            'visual_tools: "intermediate"' \
+            > _bmad/cis/config.yaml
+        fi
+        echo "[cis substrate] _bmad/cis/config.yaml ready"
+    transitions:
+      success: frame
+
+  - id: frame
+    type: ai_coding
+    settings:
+      agent: bmad-cis:quinn-problem-solver
+      permissionMode: allow
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        [MAIster x BMAD — execution contract]
+        You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree on the correct branch. AskUserQuestion is DISABLED — never ask the user; make best-judgment decisions; corrections arrive via the HITL review gate. MAIster owns git + promotion: commit locally only; do NOT create worktrees/branches, merge, push, or open PRs. Inside any BMad skill, IGNORE the "On Activation / greet / present menu / STOP and wait for input" steps — execute the skill's <workflow> body directly. Load config from _bmad/cis/config.yaml.
+
+        THIS NODE — Frame the problem (Dr. Quinn):
+        - Idea / task: {{ task.prompt }}
+        - Drive the `bmad-cis-problem-solving` skill autonomously: frame the real problem/opportunity, hunt root causes (TRIZ / Theory of Constraints / Systems Thinking), and state the core question crisply. Write the framing to docs/discovery/framing.md. No placeholders.
+        - Commit locally (e.g. "docs(cis): problem framing").
+    output:
+      produces:
+        - id: framing
+          kind: generic_file
+    transitions:
+      success: ideate
+
+  - id: ideate
+    type: ai_coding
+    settings:
+      agent: bmad-cis:maya-design-thinking
+      permissionMode: allow
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        [MAIster x BMAD — execution contract]
+        You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree. AskUserQuestion is DISABLED — never ask the user; corrections arrive via the HITL review gate. Commit locally only; do NOT merge/push/PR. Inside any BMad skill, skip its activation/greet/menu steps and execute the <workflow> body. Load config from _bmad/cis/config.yaml.
+
+        THIS NODE — Ideate human-centered concepts (Maya):
+        - Read the framing under docs/discovery/framing.md. Drive the `bmad-cis-design-thinking` skill autonomously: diverge into human-centered solution concepts grounded in genuine user needs, then converge on the strongest few. Write the concepts to docs/discovery/concepts.md. No placeholders.
+        - Commit locally (e.g. "docs(cis): solution concepts").
+
+        Reviewer feedback from a prior review (empty on first pass):
+        {{ review_comments }}
+    input:
+      requires:
+        - artifact: framing
+          kind: generic_file
+    output:
+      produces:
+        - id: concepts
+          kind: generic_file
+    transitions:
+      success: synthesize
+
+  - id: synthesize
+    type: ai_coding
+    settings:
+      agent: bmad-cis:victor-innovation
+      permissionMode: allow
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        [MAIster x BMAD — execution contract]
+        You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree. AskUserQuestion is DISABLED — never ask the user. Commit locally only; do NOT merge/push/PR. Inside any BMad skill, skip its activation/greet/menu steps and execute the <workflow> body. Load config from _bmad/cis/config.yaml.
+
+        THIS NODE — Assess value + write the discovery brief (Victor):
+        - Read docs/discovery/framing.md and docs/discovery/concepts.md. Drive the `bmad-cis-innovation-strategy` skill autonomously: assess the business/innovation value (Jobs-to-be-Done, disruption/Blue-Ocean lens) and select the winning direction.
+        - Synthesize a concise DISCOVERY BRIEF and write it to docs/planning-artifacts/discovery-brief.md (problem, target user, winning concept, value proposition, key risks, recommended next step). This brief is the handoff to the bmm-plan flow.
+        - Commit locally (e.g. "docs(cis): discovery brief"). STOP after the brief — the next node reviews it.
+
+        Reviewer feedback from a prior review (empty on first pass):
+        {{ review_comments }}
+    input:
+      requires:
+        - artifact: concepts
+          kind: generic_file
+    pre_finish:
+      gates:
+        - id: brief-written
+          kind: command_check
+          mode: blocking
+          command: "test -s docs/planning-artifacts/discovery-brief.md"
+    output:
+      produces:
+        - id: discovery-brief
+          kind: generic_file
+    transitions:
+      success: review
+
+  - id: review
+    type: human
+    finish:
+      human:
+        role: maintainer
+        decisions: [approve, rework]
+        commentsVar: review_comments
+    transitions:
+      approve: done
+      rework: ideate
+    rework:
+      allowedTargets: [ideate]
+      workspacePolicies: [keep, rewind-to-node-checkpoint]
+      maxLoops: 3
+      commentsVar: review_comments

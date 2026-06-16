@@ -13,6 +13,9 @@ through `maister.yaml packages[]`, pinned by a per-package git tag
 | `aif` | [aif/](aif/README.md) | `aif-dev`, `aif-bugfix`, `aif-evolve`, `aif-roadmap`, `aif-init` | AI Factory skills + subagents (`github.com/lee-to/ai-factory@2.x`) |
 | `superpowers` | [superpowers/](superpowers/README.md) | `sp-dev`, `sp-debug`, `sp-plan`, `sp-execute` | superpowers skills, all 14 (`github.com/obra/superpowers@5.1.0`) |
 | `openspec` | [openspec/](openspec/README.md) | `os-dev`, `os-propose`, `os-apply`, `os-init` | reference-only — drives the `openspec` CLI (`@fission-ai/openspec@1.4.1`, installed by `setup.sh` / `os-init`); ADR-091 `requirements` precondition |
+| `bmad-bmm` | [bmad-bmm/](bmad-bmm/README.md) | `bmm-plan`, `bmm-dev-story`, `bmm-quick-dev` | BMAD Method v6 BMM SDLC: 6 platform-agent personas + 26 vendored BMM skills (`github.com/bmad-code-org/BMAD-METHOD@v6.8.0`) |
+| `bmad-tea` | [bmad-tea/](bmad-tea/README.md) | `tea-test-design`, `tea-automate`, `tea-nfr`, `tea-trace`, `tea-test-review` | BMAD Test Architect: Murat platform agent + 9 vendored testarch skills (`github.com/bmad-code-org/bmad-method-test-architecture-enterprise@v1.19.0`) |
+| `bmad-cis` | [bmad-cis/](bmad-cis/README.md) | `cis-discovery` | BMAD Creative Intelligence Suite: 6 creative platform-agent personas + 4 vendored creative skills (`github.com/bmad-code-org/bmad-module-creative-intelligence-suite@v0.2.1`) |
 
 ## What every package documents
 

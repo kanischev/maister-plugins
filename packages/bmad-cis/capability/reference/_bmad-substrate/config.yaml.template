@@ -1,0 +1,11 @@
+# Canonical BMad CIS config the vendored creative skills read from
+# `{project-root}/_bmad/cis/config.yaml`. Written into the run worktree
+# idempotently by the cis-discovery flow's `substrate` cli node (project_name
+# from `{{ run.projectSlug }}`). Keys mirror BMAD CIS v0.2.1 src/module.yaml +
+# core vars.
+project_name: "<project-slug>"
+user_name: "MAIster"
+communication_language: "English"
+document_output_language: "English"
+output_folder: "docs"
+visual_tools: "intermediate"
