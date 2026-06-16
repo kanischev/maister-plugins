@@ -1,0 +1,107 @@
+schemaVersion: 1
+name: tea-test-design
+metadata:
+  title: "TEA — Test Design"
+  summary: "Murat designs a risk-based test strategy and coverage plan (risk assessment + NFR planning) for the target scope, then a human review gate. Produces a test-design artifact under docs/test-artifacts/."
+  labels: [testing, quality, test-design, tea, bmad]
+  route_when: "Plan testing for a feature/epic: risk assessment, NFR planning, and coverage strategy before writing tests."
+  links:
+    - { kind: framework, title: "BMAD Test Architect", url: "https://github.com/bmad-code-org/bmad-method-test-architecture-enterprise" }
+  sources:
+    - { component: "capability/skills/bmad-testarch-test-design", origin: "github.com/bmad-code-org/bmad-method-test-architecture-enterprise@v1.19.0" }
+runner_profiles:
+  claude-code:
+    capability_agent: claude
+    adapter: claude
+    model: claude-opus-4-8
+    provider:
+      kind: anthropic
+compat:
+  engine_min: 1.5.0
+defaults:
+  session_policy: resume
+verdict_calibration:
+  confidence_min: 0.7
+nodes:
+  - id: substrate
+    type: cli
+    action:
+      command: |
+        set -e
+        mkdir -p _bmad/tea docs/test-artifacts
+        if [ ! -f _bmad/tea/config.yaml ]; then
+          printf '%s\n' \
+            'project_name: "{{ run.projectSlug }}"' \
+            'user_name: "MAIster"' \
+            'communication_language: "English"' \
+            'document_output_language: "English"' \
+            'output_folder: "docs"' \
+            'test_artifacts: "docs/test-artifacts"' \
+            'tea_use_playwright_utils: true' \
+            'tea_use_pactjs_utils: false' \
+            'tea_pact_mcp: "none"' \
+            'tea_browser_automation: "auto"' \
+            'tea_execution_mode: "auto"' \
+            'tea_capability_probe: true' \
+            'test_stack_type: "auto"' \
+            'ci_platform: "auto"' \
+            'test_framework: "auto"' \
+            'risk_threshold: "p1"' \
+            'test_design_output: "test-design"' \
+            'test_review_output: "test-reviews"' \
+            'trace_output: "traceability"' \
+            > _bmad/tea/config.yaml
+        fi
+        echo "[tea substrate] _bmad/tea/config.yaml ready"
+    transitions:
+      success: work
+
+  - id: work
+    type: ai_coding
+    settings:
+      agent: bmad-tea:murat-test-architect
+      permissionMode: allow
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        [MAIster x BMAD — execution contract]
+        You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree on the correct branch. AskUserQuestion is DISABLED — never ask the user; make best-judgment decisions; corrections arrive via the HITL review gate. MAIster owns git + promotion: commit locally only; do NOT create worktrees/branches, merge, push, or open PRs. Inside any BMad skill, IGNORE the "On Activation / greet / present menu / STOP and wait for input" steps — execute the skill's <workflow> body directly. Load config from _bmad/tea/config.yaml.
+
+        THIS NODE — Test design:
+        - Scope / task: {{ task.prompt }}
+        - Drive the `bmad-testarch-test-design` skill autonomously: design a risk-based test strategy and coverage plan (risk assessment + NFR planning) for the target scope. Write the artifact under docs/test-artifacts/. No placeholders.
+        - Commit locally (e.g. "docs(tea): test design"). STOP after the artifact — the next node reviews it.
+
+        Reviewer feedback from a prior review (empty on first pass):
+        {{ review_comments }}
+    pre_finish:
+      gates:
+        - id: artifact-written
+          kind: command_check
+          mode: blocking
+          command: "test -n \"$(find docs/test-artifacts -type f -size +0c 2>/dev/null)\""
+    output:
+      produces:
+        - id: tea-artifact
+          kind: generic_file
+    transitions:
+      success: review
+
+  - id: review
+    type: human
+    finish:
+      human:
+        role: maintainer
+        decisions: [approve, rework]
+        commentsVar: review_comments
+    transitions:
+      approve: done
+      rework: work
+    rework:
+      allowedTargets: [work]
+      workspacePolicies: [keep, rewind-to-node-checkpoint]
+      maxLoops: 3
+      commentsVar: review_comments
