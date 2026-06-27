@@ -16,10 +16,23 @@ runner_profiles:
     model: claude-opus-4-8
     provider:
       kind: anthropic
+# settings.agent binding (M34) -> engine_min >= 1.5.0; typed artifacts (1.2.0),
+# retry/session policies (1.4.0); first-class sessions (M42, ADR-114) -> >= 2.0.0.
 compat:
-  engine_min: 1.5.0
+  engine_min: 2.0.0
 defaults:
   session_policy: resume
+# M42 (ADR-114): each creative persona runs in its OWN session so the handoff is a
+# clean baton pass — Dr. Quinn frames (`frame`), Maya ideates (`ideate`), Victor
+# synthesizes the brief (`synthesize`) — rather than one accumulating context.
+# Every session inherits the flow's one claude-code runner (the persona is the
+# `settings.agent` body); state flows through the typed artifacts (framing,
+# concepts, discovery-brief). The review->ideate rework keeps `resume` so Maya
+# retains her concepts + the reviewer's critique on a redo.
+sessions:
+  frame: { runner: claude-code }
+  ideate: { runner: claude-code }
+  synthesize: { runner: claude-code }
 verdict_calibration:
   confidence_min: 0.7
 nodes:
@@ -45,6 +58,8 @@ nodes:
 
   - id: frame
     type: ai_coding
+    # M42: Dr. Quinn's own session.
+    session: frame
     settings:
       agent: bmad-cis:quinn-problem-solver
       permissionMode: allow
@@ -70,6 +85,8 @@ nodes:
 
   - id: ideate
     type: ai_coding
+    # M42: Maya's own session (fresh from Quinn's framing context).
+    session: ideate
     settings:
       agent: bmad-cis:maya-design-thinking
       permissionMode: allow
@@ -101,6 +118,8 @@ nodes:
 
   - id: synthesize
     type: ai_coding
+    # M42: Victor's own session.
+    session: synthesize
     settings:
       agent: bmad-cis:victor-innovation
       permissionMode: allow

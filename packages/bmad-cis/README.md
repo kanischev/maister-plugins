@@ -8,6 +8,21 @@ for MAIster**. Six creative personas as platform agents, plus a multi-persona
 Versioned by per-package git tags: `bmad-cis/vX.Y.Z`. The **upstream CIS version
 is pinned to `v0.2.1`** (recorded in `maister-package.yaml` `metadata.sources`).
 
+## What changed in `bmad-cis/v1.1.0`
+
+Adopts the MAIster **flow engine 2.0.0** baseline (M42 / ADR-114 — unified
+runner config + first-class sessions):
+
+- `compat.engine_min: 2.0.0` on the discovery flow.
+- **`cis-discovery`** runs each creative persona in its OWN session so the
+  handoff is a clean baton pass — Dr. Quinn frames (`frame`), Maya ideates
+  (`ideate`), Victor synthesizes the brief (`synthesize`) — instead of one
+  accumulating context. The `review → ideate` rework keeps `resume` so Maya
+  retains her concepts + the reviewer's critique on a redo. Every session
+  inherits the flow's one `claude-code` runner (the persona is the
+  `settings.agent` body); state flows through the typed artifacts (framing,
+  concepts, discovery-brief).
+
 ## Provenance
 
 - **Framework**: BMAD Creative Intelligence Suite (MIT, © BMad Code, LLC).
