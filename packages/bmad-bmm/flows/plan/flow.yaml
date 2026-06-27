@@ -17,11 +17,25 @@ runner_profiles:
     provider:
       kind: anthropic
 # settings.agent binding (M34) -> engine_min >= 1.5.0; typed artifacts (1.2.0),
-# retry/session policies (1.4.0) are all covered by the 1.5.0 floor.
+# retry/session policies (1.4.0); first-class sessions (M42, ADR-114) -> >= 2.0.0.
 compat:
-  engine_min: 1.5.0
+  engine_min: 2.0.0
 defaults:
   session_policy: resume
+# M42 (ADR-114): each planning persona runs in its OWN session so one persona's
+# context never bleeds into the next — Mary (analyst), John (pm), Sally (ux), and
+# Winston (architecture: architecture + epics + readiness share Winston's session,
+# one continuous architectural thread). Every session inherits the flow's one
+# claude-code runner — the persona is the `settings.agent` body, the host model is
+# the same — and state flows through the typed planning artifacts (product-brief,
+# prd-doc, ux-doc, architecture-doc, epics-doc). Review reworks keep the default
+# `resume` so a persona retains its own prior draft + the reviewer's critique on a
+# redo.
+sessions:
+  analyst: { runner: claude-code }
+  pm: { runner: claude-code }
+  ux: { runner: claude-code }
+  architecture: { runner: claude-code }
 verdict_calibration:
   confidence_min: 0.7
 nodes:
@@ -54,6 +68,8 @@ nodes:
 
   - id: brief
     type: ai_coding
+    # M42: Mary's own session.
+    session: analyst
     settings:
       agent: bmad-bmm:mary-analyst
       permissionMode: allow
@@ -104,6 +120,8 @@ nodes:
 
   - id: prd
     type: ai_coding
+    # M42: John's own session (fresh from Mary's analyst context).
+    session: pm
     settings:
       agent: bmad-bmm:john-pm
       permissionMode: allow
@@ -157,6 +175,8 @@ nodes:
 
   - id: ux
     type: ai_coding
+    # M42: Sally's own session.
+    session: ux
     settings:
       agent: bmad-bmm:sally-ux
       permissionMode: allow
@@ -186,6 +206,8 @@ nodes:
 
   - id: architecture
     type: ai_coding
+    # M42: Winston's session — shared by architecture, epics, readiness.
+    session: architecture
     settings:
       agent: bmad-bmm:winston-architect
       permissionMode: allow
@@ -239,6 +261,8 @@ nodes:
 
   - id: epics
     type: ai_coding
+    # M42: continues Winston's architecture session.
+    session: architecture
     settings:
       agent: bmad-bmm:winston-architect
       permissionMode: allow
@@ -273,6 +297,8 @@ nodes:
 
   - id: readiness
     type: ai_coding
+    # M42: continues Winston's architecture session.
+    session: architecture
     settings:
       agent: bmad-bmm:winston-architect
       permissionMode: allow

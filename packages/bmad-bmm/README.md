@@ -9,6 +9,27 @@ Versioned by per-package git tags: `bmad-bmm/vX.Y.Z`. The **upstream BMAD
 Method version is pinned to `v6.8.0`** (recorded in `maister-package.yaml`
 `metadata.sources` and below); it is independent of this package's own tag.
 
+## What changed in `bmad-bmm/v1.1.0`
+
+Adopts the MAIster **flow engine 2.0.0** baseline (M42 / ADR-114 — unified
+runner config + first-class sessions). Each persona now runs in its OWN session,
+so one persona's context never bleeds into the next:
+
+- `compat.engine_min: 2.0.0` on all three flows.
+- **`bmm-plan`** — Mary (`analyst`), John (`pm`), Sally (`ux`), and Winston
+  (`architecture` — architecture + epics + readiness share one continuous
+  session). Review reworks keep `resume`, so a persona retains its own prior
+  draft + the reviewer's critique on a redo.
+- **`bmm-dev-story`** — Amelia drives every node, but each phase runs in its own
+  session: story authoring (`default`), implementation (`dev`), fresh-eyes
+  `code_review`, and `fix`. The `review → fix` rework re-enters `fix` fresh each
+  iteration (`session_policy: new_session`).
+- Every session inherits the flow's one `claude-code` runner (the persona is the
+  `settings.agent` body, the host model is unchanged); state flows through the
+  typed planning / implementation artifacts.
+- `bmm-quick-dev` keeps a single reused `default` session (engine-baseline bump
+  only).
+
 ## Provenance
 
 - **Framework**: BMAD Method — https://github.com/bmad-code-org/BMAD-METHOD
