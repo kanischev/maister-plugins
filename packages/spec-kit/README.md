@@ -9,6 +9,21 @@ Versioned by per-package git tags: `spec-kit/vX.Y.Z`. The **Spec Kit version is
 pinned to `github/spec-kit@v0.10.3`** in `setup.sh` and the `sk-init` flow's
 installer.
 
+## What changed in `spec-kit/v1.1.0`
+
+Adopts the MAIster **flow engine 2.0.0** baseline (M42 / ADR-114 — unified
+runner config + first-class sessions):
+
+- `compat.engine_min: 2.0.0` on both flows.
+- **`sk-dev`** keeps the spec-authoring chain (`specify`, `clarify-apply`,
+  `plan`, `tasks`, `analyze`) on the implicit `default` session — each
+  `/speckit-*` phase builds on the prior — while `implement` and `code_review`
+  run on their own fresh sessions. The `review → implement` rework re-enters
+  `implement` fresh each iteration (`session_policy: new_session`). All sessions
+  inherit the flow's one `claude-code` runner; state flows through the typed
+  artifacts (feature-spec, impl-diff).
+- `sk-init` keeps a single reused `default` session (engine-baseline bump only).
+
 ## Provenance
 
 - **Framework**: Spec Kit — https://github.com/github/spec-kit (MIT). The
