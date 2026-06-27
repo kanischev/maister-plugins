@@ -10,6 +10,24 @@ This package is self-contained; nothing here imports from MAIster core.
 Versioned by per-package git tags: `superpowers/vX.Y.Z` (see the repo root
 README).
 
+## What changed in `superpowers/v1.1.0`
+
+Adopts the MAIster **flow engine 2.0.0** baseline (M42 / ADR-114 — unified
+runner config + first-class sessions):
+
+- `compat.engine_min: 2.0.0` on all four flows.
+- **`sp-dev`** splits its single reused context into fresh-context sessions —
+  `implement`, `verify` (verify + code_review), `fix`, `finalize` — while
+  brainstorm + plan stay on the implicit `default` session. The `review → fix`
+  rework re-enters `fix` fresh each iteration (`session_policy: new_session`).
+- **`sp-execute`** does the same for `verify` / `fix` / `finalize` (its `execute`
+  entry node runs on `default`).
+- Every session **inherits the flow's one `claude-code` runner** — context
+  resets, not new runners. State flows between phases through the typed artifacts
+  (design-spec, plan-doc, impl-diff), not session memory.
+- `sp-plan`, `sp-debug` keep a single reused `default` session (engine-baseline
+  bump only).
+
 ## Provenance
 
 - **Framework**: superpowers — https://github.com/obra/superpowers (MIT,
@@ -67,7 +85,7 @@ A consuming project's `maister.yaml` registers this package:
 packages:
   - id: superpowers
     source: github.com/<org>/maister-plugins
-    version: superpowers/v1.0.0
+    version: superpowers/v1.1.0
     path: packages/superpowers
 ```
 
