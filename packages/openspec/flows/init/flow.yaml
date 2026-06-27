@@ -17,8 +17,10 @@ runner_profiles:
     provider:
       kind: anthropic
 # must_touch mutation gate -> engine_min >= 1.3.0; retry/session -> >= 1.4.0.
+# Pinned to the M42 2.0.0 engine baseline for this package release (single
+# reused default session; no sessions: map needed).
 compat:
-  engine_min: 1.4.0
+  engine_min: 2.0.0
 defaults:
   session_policy: resume
 # os-init INSTALLS the openspec CLI, so it must NOT require it present — it

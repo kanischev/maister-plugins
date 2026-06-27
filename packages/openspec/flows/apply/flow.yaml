@@ -16,8 +16,10 @@ runner_profiles:
     model: claude-opus-4-8
     provider:
       kind: anthropic
+# Pinned to the M42 2.0.0 engine baseline for this package release (single
+# reused default session; no sessions: map needed).
 compat:
-  engine_min: 1.4.0
+  engine_min: 2.0.0
 defaults:
   session_policy: resume
 verdict_calibration:
