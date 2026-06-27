@@ -17,12 +17,25 @@ runner_profiles:
     model: claude-opus-4-8
     provider:
       kind: anthropic
-# Typed artifacts -> engine_min >= 1.2.0; retry/session policies -> >= 1.4.0.
+# Typed artifacts -> engine_min >= 1.2.0; retry/session policies -> >= 1.4.0;
+# first-class sessions (M42, ADR-114) -> engine_min >= 2.0.0.
 compat:
-  engine_min: 1.4.0
-# One ACP session reused across nodes; per-node/per-rework policies override.
+  engine_min: 2.0.0
+# Rework re-entry resumes the prior ACP session by default; the review->fix loop
+# overrides with session_policy: new_session for a clean re-attempt.
 defaults:
   session_policy: resume
+# M42 (ADR-114): first-class sessions split the reused agent context into
+# fresh-context phases — implement / verify / fix / finalize — each inheriting
+# the flow's one claude-code runner (no new runners). State flows through the
+# typed artifacts (design-spec, plan-doc, impl-diff, gate result), not session
+# memory. Design + planning (brainstorm, plan) stay on the implicit `default`
+# session.
+sessions:
+  implement: { runner: claude-code }
+  verify: { runner: claude-code }
+  fix: { runner: claude-code }
+  finalize: { runner: claude-code }
 # Folded into the advisory ai_judgment gate at compile.
 verdict_calibration:
   confidence_min: 0.7
@@ -143,6 +156,8 @@ nodes:
 
   - id: implement
     type: ai_coding
+    # M42: fresh context — the approved plan is read from disk, not session memory.
+    session: implement
     retry_policy:
       attempts: 2
       on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
@@ -176,6 +191,8 @@ nodes:
 
   - id: verify
     type: ai_coding
+    # M42: fresh verification context (the diff is read from disk).
+    session: verify
     retry_policy:
       attempts: 2
       on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
@@ -207,6 +224,8 @@ nodes:
 
   - id: code_review
     type: ai_coding
+    # M42: shares the verify session; the prompt also reads the diff fresh.
+    session: verify
     retry_policy:
       attempts: 2
       on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
@@ -272,9 +291,13 @@ nodes:
       workspacePolicies: [keep, rewind-to-node-checkpoint]
       maxLoops: 3
       commentsVar: review_comments
+      # M42: each rework iteration re-enters `fix` on a fresh session.
+      session_policy: new_session
 
   - id: fix
     type: ai_coding
+    # M42: fresh rework context, focused on {{ review_comments }}.
+    session: fix
     retry_policy:
       attempts: 2
       on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
@@ -296,6 +319,8 @@ nodes:
 
   - id: finalize
     type: ai_coding
+    # M42: clean finalize context — only the working tree matters here.
+    session: finalize
     retry_policy:
       attempts: 2
       on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
