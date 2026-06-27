@@ -16,10 +16,21 @@ runner_profiles:
     model: claude-opus-4-8
     provider:
       kind: anthropic
+# settings.agent binding (M34) -> engine_min >= 1.5.0; typed artifacts (1.2.0),
+# retry/session policies (1.4.0); first-class sessions (M42, ADR-114) -> >= 2.0.0.
 compat:
-  engine_min: 1.5.0
+  engine_min: 2.0.0
 defaults:
   session_policy: resume
+# M42 (ADR-114): Amelia drives every node, but each phase runs in its OWN session
+# so context stays clean — story authoring (`default`), implementation (`dev`),
+# fresh-eyes code review (`code_review`), and rework (`fix`). All inherit the
+# flow's one claude-code runner; state flows through the typed artifacts
+# (story-doc, impl-diff). The review->fix loop re-enters `fix` fresh each time.
+sessions:
+  dev: { runner: claude-code }
+  code_review: { runner: claude-code }
+  fix: { runner: claude-code }
 verdict_calibration:
   confidence_min: 0.7
 nodes:
@@ -98,6 +109,8 @@ nodes:
 
   - id: dev
     type: ai_coding
+    # M42: fresh implementation session (reads the approved story from disk).
+    session: dev
     settings:
       agent: bmad-bmm:amelia-dev
       permissionMode: allow
@@ -127,6 +140,8 @@ nodes:
 
   - id: code_review
     type: ai_coding
+    # M42: fresh-eyes review session (no implementer bias from `dev`).
+    session: code_review
     settings:
       agent: bmad-bmm:amelia-dev
       permissionMode: allow
@@ -188,9 +203,13 @@ nodes:
       workspacePolicies: [keep, rewind-to-node-checkpoint]
       maxLoops: 3
       commentsVar: review_comments
+      # M42: each rework iteration re-enters `fix` on a fresh session.
+      session_policy: new_session
 
   - id: fix
     type: ai_coding
+    # M42: fresh rework context, focused on {{ review_comments }}.
+    session: fix
     settings:
       agent: bmad-bmm:amelia-dev
       permissionMode: allow
