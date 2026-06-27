@@ -8,6 +8,21 @@ Versioned by per-package git tags: `openspec/vX.Y.Z`. The **OpenSpec CLI version
 is pinned to `@fission-ai/openspec@1.4.1`** in `setup.sh` and the `os-init`
 flow's installer.
 
+## What changed in `openspec/v1.1.0`
+
+Adopts the MAIster **flow engine 2.0.0** baseline (M42 / ADR-114 — unified
+runner config + first-class sessions):
+
+- `compat.engine_min: 2.0.0` on all four flows.
+- **`os-dev`** splits into fresh-context sessions — `apply`, `code_review`,
+  `fix` — while `propose` runs on the implicit `default` session (the `verify`
+  and `archive` nodes are deterministic check/cli, no agent session). The
+  `review → fix` rework re-enters `fix` fresh each iteration
+  (`session_policy: new_session`). Sessions inherit the flow's one `claude-code`
+  runner; state flows through the typed artifacts (change-proposal, impl-diff).
+- `os-init`, `os-propose`, `os-apply` keep a single reused `default` session
+  (engine-baseline bump only).
+
 ## Provenance
 
 - **Framework**: OpenSpec — https://github.com/Fission-AI/OpenSpec (MIT). The

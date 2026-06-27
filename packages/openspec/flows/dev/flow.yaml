@@ -18,11 +18,24 @@ runner_profiles:
     provider:
       kind: anthropic
 # Typed artifacts -> engine_min >= 1.2.0; must_touch mutation gate -> >= 1.3.0;
-# retry/session policies -> >= 1.4.0. (`requirements` is additive, no floor.)
+# retry/session policies -> >= 1.4.0; first-class sessions (M42, ADR-114) ->
+# >= 2.0.0. (`requirements` is additive, no floor.)
 compat:
-  engine_min: 1.4.0
+  engine_min: 2.0.0
+# Rework re-entry resumes the prior ACP session by default; the review->fix loop
+# overrides with session_policy: new_session for a clean re-attempt.
 defaults:
   session_policy: resume
+# M42 (ADR-114): first-class sessions split the reused agent context into
+# fresh-context phases — apply / code_review / fix — each inheriting the flow's
+# one claude-code runner (no new runners). State flows through the typed
+# artifacts (change-proposal, impl-diff), not session memory. The `propose` node
+# runs on the implicit `default` session; `verify`/`archive` are deterministic
+# (check/cli, no agent session).
+sessions:
+  apply: { runner: claude-code }
+  code_review: { runner: claude-code }
+  fix: { runner: claude-code }
 verdict_calibration:
   confidence_min: 0.7
 # ADR-091: refuse launch before any worktree/session if the OpenSpec CLI is
@@ -92,6 +105,8 @@ nodes:
 
   - id: apply
     type: ai_coding
+    # M42: fresh context — implements the approved proposal (read from disk).
+    session: apply
     settings:
       permissionMode: allow
     retry_policy:
@@ -138,6 +153,8 @@ nodes:
 
   - id: code_review
     type: ai_coding
+    # M42: fresh-eyes review session (the prompt also reads the diff fresh).
+    session: code_review
     settings:
       permissionMode: allow
     retry_policy:
@@ -199,9 +216,13 @@ nodes:
       workspacePolicies: [keep, rewind-to-node-checkpoint]
       maxLoops: 3
       commentsVar: review_comments
+      # M42: each rework iteration re-enters `fix` on a fresh session.
+      session_policy: new_session
 
   - id: fix
     type: ai_coding
+    # M42: fresh rework context, focused on {{ review_comments }}.
+    session: fix
     settings:
       permissionMode: allow
     retry_policy:
