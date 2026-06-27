@@ -17,13 +17,26 @@ runner_profiles:
     model: claude-opus-4-8
     provider:
       kind: anthropic
-# Typed artifacts → engine_min >= 1.2.0; M30 retry/session policies → >= 1.4.0.
+# Typed artifacts → engine_min >= 1.2.0; M30 retry/session policies → >= 1.4.0;
+# first-class sessions (M42, ADR-114) → engine_min >= 2.0.0.
 compat:
-  engine_min: 1.4.0
-# M30 (ADR-081): pin the engine default explicitly — one ACP session reused
-# across nodes; per-node/per-rework policies override.
+  engine_min: 2.0.0
+# M30 (ADR-081): rework re-entry resumes the prior ACP session by default; a
+# per-rework `session_policy: new_session` overrides it where a clean re-attempt
+# is wanted (the review→fix loop below).
 defaults:
   session_policy: resume
+# M42 (ADR-114): first-class sessions split the single reused agent context into
+# fresh-context phases at meaningful boundaries — implement / verify / fix /
+# commit — each inheriting the flow's one claude-code runner (no new runners).
+# Cross-session state flows through the typed artifacts (impl-diff, gate result),
+# not session memory. Planning (plan, improve) stays on the implicit `default`
+# session.
+sessions:
+  implement: { runner: claude-code }
+  verify: { runner: claude-code }
+  fix: { runner: claude-code }
+  commit: { runner: claude-code }
 # Flow-level calibration default, folded into the advisory ai_judgment gate at compile.
 verdict_calibration:
   confidence_min: 0.7
@@ -92,6 +105,8 @@ nodes:
 
   - id: implement
     type: ai_coding
+    # M42: fresh context — the approved plan is read from disk, not session memory.
+    session: implement
     retry_policy:
       attempts: 2
       on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
@@ -112,6 +127,8 @@ nodes:
   # Stack-agnostic verification (no hardcoded pnpm) — emits the gate result artifact.
   - id: checks
     type: ai_coding
+    # M42: fresh verification context (the diff is read from disk).
+    session: verify
     retry_policy:
       attempts: 2
       on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
@@ -134,6 +151,8 @@ nodes:
 
   - id: code_review
     type: ai_coding
+    # M42: shares the verify session — reviews the same diff checks just gated.
+    session: verify
     retry_policy:
       attempts: 2
       on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
@@ -191,9 +210,14 @@ nodes:
       workspacePolicies: [keep, rewind-to-node-checkpoint]
       maxLoops: 3
       commentsVar: review_comments
+      # M42: each rework iteration re-enters `fix` on a fresh session so a stale
+      # prior attempt never colors the next one.
+      session_policy: new_session
 
   - id: fix
     type: ai_coding
+    # M42: fresh rework context, focused on {{ review_comments }}.
+    session: fix
     retry_policy:
       attempts: 2
       on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
@@ -208,6 +232,8 @@ nodes:
 
   - id: commit
     type: ai_coding
+    # M42: clean commit context — only the working tree matters here.
+    session: commit
     retry_policy:
       attempts: 2
       on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]

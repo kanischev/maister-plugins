@@ -43,6 +43,24 @@ Flow sources live under `flows/<id>/flow.yaml`.
 | `config/ai-factory.config.yaml` | Default `.ai-factory/config.yaml` template for a consuming project.    |
 | `setup.sh`                    | Inert no-op (see below).                                                |
 
+## What changed in `aif/v2.1.0`
+
+Adopts the MAIster **flow engine 2.0.0** baseline (M42 / ADR-114 — unified
+runner config + first-class sessions):
+
+- `compat.engine_min: 2.0.0` on all five flows.
+- **`aif-dev` first-class sessions** — the single reused agent context is split
+  into fresh-context phases at meaningful boundaries: `implement`, `verify`
+  (checks + code_review), `fix`, and `commit` each run as their own ACP session,
+  while planning (`plan`, `improve`) stays on the implicit `default` session.
+  State flows between phases through the typed artifacts (impl-diff, gate
+  result), not session memory. The `review → fix` rework loop re-enters `fix` on
+  a fresh session each iteration (`session_policy: new_session`).
+- Every session **inherits the flow's one `claude-code` runner** — these are
+  context resets, not new runners.
+- `aif-bugfix`, `aif-evolve`, `aif-roadmap`, `aif-init` keep their single reused
+  `default` session (engine-baseline bump only).
+
 ## What changed in `aif/v2.0.0`
 
 Engine-feature bump applied at extraction (vs the `local-dev` package that
@@ -63,7 +81,7 @@ shipped inside the MAIster repo):
   (mutation ranges are committed-only).
 - `maister-package.yaml` added — the package manifest for MAIster package
   management (single-import). `must_not_touch` protection zones are
-  deliberately deferred to `aif/v2.1.0`: they need restriction capability
+  deliberately deferred to a later release: they need restriction capability
   records, which packages can ship only once MAIster typed ingestion lands.
 
 ## How MAIster consumes it
