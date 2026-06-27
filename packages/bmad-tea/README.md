@@ -9,6 +9,16 @@ Versioned by per-package git tags: `bmad-tea/vX.Y.Z`. The **upstream TEA version
 is pinned to `v1.19.0`** (recorded in `maister-package.yaml` `metadata.sources`);
 independent of this package's own tag.
 
+## What changed in `bmad-tea/v1.1.0`
+
+Adopts the MAIster **flow engine 2.0.0** baseline (M42 / ADR-114 — unified
+runner config + first-class sessions):
+
+- `compat.engine_min: 2.0.0` on all five flows.
+- Each TEA flow is a single Murat-driven phase plus a human review gate, so all
+  five keep one reused `default` session (engine-baseline bump only) — there is
+  no multi-phase context to reset.
+
 ## Provenance
 
 - **Framework**: BMAD Test Architect (MIT, © BMad Code, LLC). License vendored
