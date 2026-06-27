@@ -17,11 +17,24 @@ runner_profiles:
     provider:
       kind: anthropic
 # Typed artifacts -> engine_min >= 1.2.0; must_touch mutation gate -> >= 1.3.0;
-# retry/session policies -> >= 1.4.0. (`requirements` is additive, no floor.)
+# retry/session policies -> >= 1.4.0; first-class sessions (M42, ADR-114) ->
+# >= 2.0.0. (`requirements` is additive, no floor.)
 compat:
-  engine_min: 1.4.0
+  engine_min: 2.0.0
+# Rework re-entry resumes the prior ACP session by default; the review->implement
+# loop overrides with session_policy: new_session for a clean re-implement.
 defaults:
   session_policy: resume
+# M42 (ADR-114): first-class sessions split the reused agent context into
+# fresh-context phases. The spec-authoring chain (specify, clarify-apply, plan,
+# tasks, analyze) stays on the implicit `default` session — each /speckit-* phase
+# builds on the prior — while `implement` and `code_review` get fresh sessions.
+# All inherit the flow's one claude-code runner (no new runners); state flows
+# through the typed artifacts (feature-spec, impl-diff), not session memory. The
+# gate/cli nodes hold no agent session.
+sessions:
+  implement: { runner: claude-code }
+  code_review: { runner: claude-code }
 verdict_calibration:
   confidence_min: 0.7
 # ADR-091: refuse launch before any worktree/session unless Spec Kit is present
@@ -224,6 +237,8 @@ nodes:
 
   - id: implement
     type: ai_coding
+    # M42: fresh context — builds from the analyzed spec/plan/tasks on disk.
+    session: implement
     settings:
       permissionMode: allow
     retry_policy:
@@ -266,6 +281,8 @@ nodes:
 
   - id: code-review
     type: ai_coding
+    # M42: fresh-eyes review session (the prompt also reads the diff fresh).
+    session: code_review
     settings:
       permissionMode: allow
     retry_policy:
@@ -326,6 +343,8 @@ nodes:
       workspacePolicies: [keep, rewind-to-node-checkpoint]
       maxLoops: 3
       commentsVar: review_comments
+      # M42: each rework iteration re-enters `implement` on a fresh session.
+      session_policy: new_session
 
   # Deterministic commit — a `cli` node. Earlier nodes left spec artifacts +
   # code uncommitted, so this node's committed range is the whole feature
