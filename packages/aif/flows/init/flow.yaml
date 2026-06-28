@@ -36,7 +36,7 @@ nodes:
       on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
       workspace: rewind-to-node-checkpoint
     action:
-      prompt: "/aif {{ task.prompt }}"
+      prompt: "@skill:aif {{ task.prompt }}"
     transitions:
       success: architecture
 
@@ -47,7 +47,7 @@ nodes:
       on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
       workspace: rewind-to-node-checkpoint
     action:
-      prompt: "/aif-architecture"
+      prompt: "@skill:aif-architecture"
     transitions:
       success: review
 
@@ -68,7 +68,7 @@ nodes:
       on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
       workspace: rewind-to-node-checkpoint
     action:
-      prompt: "/aif-commit"
+      prompt: "@skill:aif-commit"
     pre_finish:
       gates:
         - id: commit-gate

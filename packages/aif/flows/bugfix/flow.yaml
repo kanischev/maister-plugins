@@ -42,7 +42,7 @@ nodes:
       # review_comments is empty (runner-seeded); on a rework jump it carries the
       # reviewer's feedback so the re-fix addresses exactly what was rejected.
       prompt: |
-        /aif-fix {{ task.prompt }}
+        @skill:aif-fix {{ task.prompt }}
 
         {{ review_comments }}
     output:
@@ -62,7 +62,7 @@ nodes:
       on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
       workspace: rewind-to-node-checkpoint
     action:
-      prompt: "/aif-verify"
+      prompt: "@skill:aif-verify"
     input:
       requires:
         - artifact: impl-diff
@@ -81,7 +81,7 @@ nodes:
       on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
       workspace: rewind-to-node-checkpoint
     action:
-      prompt: "/aif-review"
+      prompt: "@skill:aif-review"
     input:
       requires:
         - artifact: impl-diff
@@ -135,7 +135,7 @@ nodes:
       on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
       workspace: rewind-to-node-checkpoint
     action:
-      prompt: "/aif-commit"
+      prompt: "@skill:aif-commit"
     pre_finish:
       gates:
         - id: commit-gate
