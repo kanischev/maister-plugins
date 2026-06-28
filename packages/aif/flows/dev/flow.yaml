@@ -64,7 +64,7 @@ nodes:
       # carries the reviewer's feedback so the re-plan addresses exactly what
       # was rejected.
       prompt: |
-        /aif-plan {{ task.prompt }}
+        @skill:aif-plan {{ task.prompt }}
 
         Non-interactive run — apply these preferences and do NOT ask:
         Testing={{ steps.intake.vars.tests }}, Logging={{ steps.intake.vars.logging }}, Docs={{ steps.intake.vars.docs }}.
@@ -81,7 +81,7 @@ nodes:
       workspace: rewind-to-node-checkpoint
     action:
       prompt: |
-        /aif-improve
+        @skill:aif-improve
 
         Non-interactive run — do NOT ask the user clarifying questions; apply your best-judgment improvements directly.
     transitions:
@@ -113,7 +113,7 @@ nodes:
       workspace: rewind-to-node-checkpoint
     action:
       prompt: |
-        /aif-implement
+        @skill:aif-implement
 
         Non-interactive run — do NOT ask the user clarifying questions; proceed autonomously (tool-use permission prompts are handled by the platform).
     output:
@@ -135,7 +135,7 @@ nodes:
       workspace: rewind-to-node-checkpoint
     action:
       prompt: |
-        /aif-verify
+        @skill:aif-verify
 
         Non-interactive run — do NOT ask the user clarifying questions; proceed autonomously.
     input:
@@ -159,7 +159,7 @@ nodes:
       workspace: rewind-to-node-checkpoint
     action:
       prompt: |
-        /aif-review
+        @skill:aif-review
 
         Non-interactive run — do NOT ask the user clarifying questions; proceed autonomously.
     input:
@@ -224,7 +224,7 @@ nodes:
       workspace: rewind-to-node-checkpoint
     action:
       prompt: |
-        /aif-fix {{ review_comments }}
+        @skill:aif-fix {{ review_comments }}
 
         Non-interactive run — do NOT ask the user clarifying questions; proceed autonomously (tool-use permission prompts are handled by the platform).
     transitions:
@@ -240,7 +240,7 @@ nodes:
       workspace: rewind-to-node-checkpoint
     action:
       prompt: |
-        /aif-commit
+        @skill:aif-commit
 
         Non-interactive run — do NOT ask the user clarifying questions (e.g. do not prompt to push); commit only.
     pre_finish:
