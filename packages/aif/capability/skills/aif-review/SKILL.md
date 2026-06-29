@@ -256,6 +256,38 @@ Append the final machine-readable result after the markdown summary:
 
 When the `+check` flag is set, the `aif-gate-result` block is assembled **after** validator filtering — `status`, `blockers`, `affected_files`, and `suggested_next` are recomputed accordingly. Exception: the whole-dispatch failure path keeps the unfiltered original list and does NOT recompute these fields. See `references/CHECK-MODE.md` for the full procedure.
 
+## Native flow routing output (`maister:output`)
+
+When this skill runs as a graph-flow node whose `decide` routes on
+`output.recommendation` (e.g. the `aif-dev` flow's `code_review` judge), append a
+**single** fenced `maister:output` block as the **last** block of your response,
+AFTER the `aif-gate-result` block. The flow engine reads THIS block (not the
+`aif-gate-result` fence) to drive an autonomous review↔fix loop; the two coexist.
+
+Derive `recommendation` from the same severity split the review already computed —
+it mirrors the `aif-gate-result` findings input:
+
+- **`fix`** — at least one **Critical Issue** remains (the `fail` findings input:
+  correctness, security, data-loss, performance, or a downstream regression). The
+  loop runs the fix and re-verifies.
+- **`commit`** — **no Critical Issues** (`pass`/`warn`: only Suggestions, missing
+  optional context, or review uncertainty remain). Non-critical items do NOT block;
+  carry them in `review_comments` so they stay visible at the final human review.
+
+Put a concise, actionable summary of exactly what the next fix must address (the
+critical issues, or the residual suggestions) in `review_comments`.
+
+```json maister:output
+{
+  "recommendation": "fix",
+  "review_comments": "Critical — order.ts:42: wrap create()+reserve() in one transaction; concurrent buyers drive stock negative. Critical — auth.ts:88: validate the redirect target against an allow-list."
+}
+```
+
+This block is additive and reusable by any flow: it never replaces the
+`aif-gate-result` block, and a standalone `/aif-review` with no `decide` node simply
+omits it.
+
 ## Review Style
 
 - Be constructive, not critical

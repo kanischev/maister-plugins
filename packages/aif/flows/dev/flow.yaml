@@ -2,7 +2,7 @@ schemaVersion: 1
 name: aif-dev
 metadata:
   title: "AIF — Develop"
-  summary: "Spec-driven delivery: intake → plan → improve → plan_review → implement → checks → code_review → review → commit; review rework → fix."
+  summary: "Spec-driven delivery: intake → plan → improve → plan_review → implement → bounded autonomous checks→code_review→fix loop → human review → commit. The code_review judge routes fix/commit from its own output; loop exhaustion escalates to the human, who can restart the loop with a fresh budget."
   labels: [feature, enhancement, refactor]
   route_when: "A feature/enhancement/refactor with a clear spec."
   links:
@@ -18,9 +18,10 @@ runner_profiles:
     provider:
       kind: anthropic
 # Typed artifacts → engine_min >= 1.2.0; M30 retry/session policies → >= 1.4.0;
-# first-class sessions (M42, ADR-114) → engine_min >= 2.0.0.
+# first-class sessions (M42, ADR-114) → engine_min >= 2.0.0; rework loop
+# onExhaustion routing + human-driven counter reset (ADR-118) → >= 2.1.0.
 compat:
-  engine_min: 2.0.0
+  engine_min: 2.1.0
 # M30 (ADR-081): rework re-entry resumes the prior ACP session by default; a
 # per-rework `session_policy: new_session` overrides it where a clean re-attempt
 # is wanted (the review→fix loop below).
@@ -150,7 +151,7 @@ nodes:
       success: code_review
 
   - id: code_review
-    type: ai_coding
+    type: judge
     # M42: shares the verify session — reviews the same diff checks just gated.
     session: verify
     retry_policy:
@@ -162,23 +163,44 @@ nodes:
         @skill:aif-review
 
         Non-interactive run — do NOT ask the user clarifying questions; proceed autonomously.
+
+        End your response with a single `maister:output` block per the aif-review
+        skill's "Native flow routing output" section: recommend "fix" when there is
+        any CRITICAL finding (the loop then fixes and re-verifies), or "commit" when
+        there are none (non-critical suggestions ride along in review_comments and do
+        NOT block). Put the concrete items the next fix must address in review_comments.
     input:
       requires:
         - artifact: impl-diff
           kind: diff
+    # ADR-103 (M38): route on the judge's own structured output. aif-review emits
+    # {recommendation: fix|commit, review_comments} as a maister:output block;
+    # `decide` reads recommendation and follows transitions[recommendation].
     output:
-      produces:
-        - id: ai-judgment
-          kind: ai_judgment
+      result:
+        schema: ./schemas/review-outcome.json
+        required: true
+    decide:
+      from: output.recommendation
     transitions:
-      success: review
+      fix: fix
+      commit: review
+      exhausted: review
+    # ADR-118: the autonomous bounded review↔fix loop lives HERE. A "fix"
+    # recommendation reworks to `fix` (→ checks → code_review) up to maxLoops on a
+    # fresh session each round; the judge's review_comments inject into `fix`. On
+    # exhaustion the loop routes to the human `review` (onExhaustion) instead of the
+    # execution-policy A1 action, so the accumulated worktree is preserved.
+    rework:
+      allowedTargets: [fix]
+      workspacePolicies: [keep]
+      maxLoops: 5
+      session_policy: new_session
+      commentsVar: review_comments
+      onExhaustion: exhausted
 
   - id: review
     type: human
-    input:
-      requires:
-        - artifact: ai-judgment
-          kind: ai_judgment
     pre_finish:
       gates:
         - id: impl-diff-required
@@ -213,6 +235,10 @@ nodes:
       # M42: each rework iteration re-enters `fix` on a fresh session so a stale
       # prior attempt never colors the next one.
       session_policy: new_session
+      # ADR-118: a human rework re-baselines the code_review loop's attempt
+      # counter → a fresh maxLoops budget, so the reviewer can restart the
+      # autonomous loop with new guidance instead of being stuck post-exhaustion.
+      resetTargets: [code_review]
 
   - id: fix
     type: ai_coding
