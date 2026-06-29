@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "fields": [
+    {
+      "name": "recommendation",
+      "label": "Review recommendation",
+      "type": "enum",
+      "required": true,
+      "options": ["fix", "commit"]
+    },
+    {
+      "name": "review_comments",
+      "label": "Review comments carried into the next fix",
+      "type": "string",
+      "required": false
+    }
+  ]
+}
