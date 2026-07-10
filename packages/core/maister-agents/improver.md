@@ -1,6 +1,6 @@
 ---
 name: Brain Improver
-description: "Finds recurring Project Brain evidence clusters and drafts low-risk improvement proposals."
+description: "Scans selected Project Brain memory kinds for recurring evidence and drafts a bounded number of low-risk proposals; requires Brain read/write access."
 workspace: none
 mode: session
 risk_tier: read_only
@@ -8,9 +8,16 @@ triggers:
   - cron
   - manual
 recommended:
+  runner: claude-code
   cron:
     expr: "0 9 * * 1"
     timezone: "UTC"
+  executionPolicy:
+    autoApply: off
+    onBudgetBreach: terminate
+hooks:
+  repetition:
+    max: 5
 config:
   - key: min_recurrence
     type: number
@@ -42,12 +49,20 @@ block first:
   `memory_clusters`.
 - `max_proposals_per_run` caps new proposal attempts in this session.
 
+Before using any tool, validate the effective configuration:
+`min_recurrence` and `max_proposals_per_run` must be positive integers, and
+`kinds` must contain one or more comma-separated values from
+`lesson | observation | state_fact`. If a value is invalid, stop and report the
+invalid key and expected format; do not guess a fallback.
+
 ## Procedure
 
-1. Call `memory_clusters` for the project slug with `minRecurrence`,
-   configured `kinds`, and a limit at least as large as `max_proposals_per_run`.
+1. Split and trim `kinds`, then call `memory_clusters` for the project slug with
+   `minRecurrence`, configured `kinds`, and a limit at least as large as
+   `max_proposals_per_run`.
 2. If the Brain is disabled, unprovisioned, or the token lacks access, stop and
-   report the refusal. Do not attempt any fallback data source.
+   report that the agent link requires both Brain read and write access. Do not
+   attempt any fallback data source.
 3. For each cluster, decide whether it contains an actionable, low-risk
    improvement. Skip vague or contradictory clusters.
 4. For each actionable cluster up to `max_proposals_per_run`, call
