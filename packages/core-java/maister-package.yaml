@@ -1,0 +1,13 @@
+# MAIster Core Java skill package. The version pin is the git tag
+# (core-java/vX.Y.Z), never a field in this file.
+schemaVersion: 1
+name: core-java
+metadata:
+  title: "MAIster Core — Java"
+  summary: "First-party Java engineering skills for build systems, testing, application architecture, performance, and production diagnostics."
+  links:
+    - { kind: docs, title: "MAIster package contract", url: "https://github.com/maisterhq/maister/blob/main/docs/pv/package-management.md" }
+flows: []
+capabilities:
+  - { id: core-java-bundle, path: capability }
+mcps: []
