@@ -2,7 +2,8 @@
 
 Package monorepo for [MAIster](https://github.com/albertkanischev/maister):
 each package is a self-contained distribution unit carrying everything its
-flows need to function — flow graphs, skills, agents, MCP server templates.
+flows or agents need to function — flow graphs, skills, agents, and MCP server
+templates.
 
 ## Layout
 
@@ -12,6 +13,7 @@ packages/
     maister-package.yaml     # package manifest (flows, capability bundles, mcps)
     flows/<flow-id>/flow.yaml
     capability/…             # skills/ + agents/ bundles
+    maister-agents/…         # optional platform-agent definitions
     README.md                # provenance + package-specific notes
 ```
 
@@ -20,9 +22,11 @@ packages/
 | [`aif`](packages/aif/) | AI Factory workflows: 5 flows (`aif-dev`, `aif-bugfix`, `aif-evolve`, `aif-roadmap`, `aif-init`) + vendored skills/agents bundle. |
 | [`superpowers`](packages/superpowers/) | [obra/superpowers](https://github.com/obra/superpowers) methodology: 4 flows (`sp-dev`, `sp-debug`, `sp-plan`, `sp-execute`) + full vendored superpowers skills bundle. |
 | [`openspec`](packages/openspec/) | [Fission-AI/OpenSpec](https://github.com/Fission-AI/OpenSpec) spec-driven workflow: 4 flows (`os-dev`, `os-propose`, `os-apply`, `os-init`) driving the `openspec` CLI (installed by `setup.sh` / `os-init`); hybrid `cli`+`ai_coding` nodes, `requirements` launch precondition. Reference-only bundle. |
-
-(`core` — platform agents: task triager/router, GitHub intake — is planned
-and not yet created.)
+| [`core`](packages/core/) | First-party platform agents for task triage, Project Brain improvement, and experiment evaluation, plus shared MAIster skills. |
+| [`core-java`](packages/core-java/) | Java and JVM skills for builds, architecture, integration testing, performance analysis, and production diagnostics. |
+| [`core-react`](packages/core-react/) | React and TypeScript frontend skills for components, state and data flow, accessibility, testing, and performance. |
+| [`core-pg`](packages/core-pg/) | PostgreSQL skills for schema design, migrations, query tuning, indexing, transactions, reliability, and operations. |
+| [`core-skill-authoring`](packages/core-skill-authoring/) | Skill-authoring skills for designing, structuring, validating, testing, and maintaining reusable MAIster agent skills. |
 
 ## Documentation
 
