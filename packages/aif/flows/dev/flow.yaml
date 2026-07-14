@@ -19,9 +19,10 @@ runner_profiles:
       kind: anthropic
 # Typed artifacts → engine_min >= 1.2.0; M30 retry/session policies → >= 1.4.0;
 # first-class sessions (M42, ADR-114) → engine_min >= 2.0.0; rework loop
-# onExhaustion routing + human-driven counter reset (ADR-118) → >= 2.1.0.
+# onExhaustion routing + human-driven counter reset (ADR-118) → >= 2.1.0;
+# typed Plan-review artifacts and decisions → >= 3.1.0.
 compat:
-  engine_min: 2.1.0
+  engine_min: 3.1.0
 # M30 (ADR-081): rework re-entry resumes the prior ACP session by default; a
 # per-rework `session_policy: new_session` overrides it where a clean re-attempt
 # is wanted (the review→fix loop below).
@@ -71,6 +72,9 @@ nodes:
         Testing={{ steps.intake.vars.tests }}, Logging={{ steps.intake.vars.logging }}, Docs={{ steps.intake.vars.docs }}.
 
         {{ plan_review_comments }}
+
+        Typed Plan-review answers from a prior decision cycle (empty on first pass):
+        {{ plan_review_answers }}
     transitions:
       success: improve
 
@@ -85,11 +89,33 @@ nodes:
         @skill:aif-improve
 
         Non-interactive run — do NOT ask the user clarifying questions; apply your best-judgment improvements directly.
+
+        Write the final Markdown implementation plan to $MAISTER_PLAN_DOCUMENT_FILE.
+        Write its strict PlanReviewV1 JSON companion to $MAISTER_PLAN_REVIEW_FILE.
+        Classify non-blocking assumptions separately from blocking decisions. Every
+        decision must offer 2-8 concrete options with stable ids and consequences;
+        never infer choices from prose or copy secret values into either artifact.
+    output:
+      produces:
+        - id: plan-document
+          kind: plan
+          current: true
+        - id: plan-review
+          kind: plan
+          current: true
     transitions:
       success: plan_review
 
   - id: plan_review
     type: human
+    settings:
+      plan_review:
+        plan_document_artifact: plan-document
+        plan_review_artifact: plan-review
+        comments_var: plan_review_comments
+        answers_var: plan_review_answers
+        rework_transition: rework
+        max_decision_reworks: 2
     finish:
       human:
         role: maintainer
