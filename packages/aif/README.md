@@ -8,6 +8,13 @@ MAIster flows backed by a shared skills + subagents bundle.
 This package is self-contained; nothing here imports from MAIster core.
 Versioned by per-package git tags: `aif/vX.Y.Z` (see the repo root README).
 
+## What changed in `aif/v2.4.0`
+
+Moves the AIF form schemas to package-root `schemas/`, which is the MAIster
+package contract. The `aif-dev` flow keeps canonical
+`./schemas/<name>.json` references; MAIster materializes those shared files into
+the flow revision at install time.
+
 ## Provenance
 
 - **Extracted from the MAIster repo** (`plugins/aif` @ `maister@c104f66b`,
@@ -39,6 +46,7 @@ Flow sources live under `flows/<id>/flow.yaml`.
 | Path                          | Purpose                                                                 |
 | ----------------------------- | ----------------------------------------------------------------------- |
 | `capability/`                 | Shared bundle — vendored AIF skills (`skills/`) + subagents (`agents/`). |
+| `schemas/`                    | Shared form schemas: `intake.json` and `review-outcome.json`.             |
 | `flows/<id>/flow.yaml`        | The 5 flow sources listed above.                                        |
 | `config/ai-factory.config.yaml` | Default `.ai-factory/config.yaml` template for a consuming project.    |
 | `setup.sh`                    | Inert no-op (see below).                                                |
