@@ -10,6 +10,12 @@ This package is self-contained; nothing here imports from MAIster core.
 Versioned by per-package git tags: `superpowers/vX.Y.Z` (see the repo root
 README).
 
+## What changed in `superpowers/v1.1.1`
+
+Moves the `sp-dev` and `sp-execute` intake forms to package-root `schemas/`.
+Their form contracts differ, so they remain separate files:
+`dev-intake.json` and `execute-intake.json`.
+
 ## What changed in `superpowers/v1.1.0`
 
 Adopts the MAIster **flow engine 2.0.0** baseline (M42 / ADR-114 — unified
@@ -56,7 +62,8 @@ Flow sources live under `flows/<id>/flow.yaml`.
 | `capability/skills/`         | The full superpowers skills bundle (all 14, vendored wholesale — `SKILL.md` + `references/` + subagent prompt templates). |
 | `capability/LICENSE.superpowers` | Upstream MIT license (provenance).                             |
 | `flows/<id>/flow.yaml`       | The 4 flow sources above.                                           |
-| `flows/{dev,execute}/schemas/intake.json` | HITL intake form schema (TDD discipline + implementation strategy). |
+| `schemas/dev-intake.json`    | `sp-dev` HITL intake form (TDD discipline + implementation strategy). |
+| `schemas/execute-intake.json` | `sp-execute` HITL intake form (TDD discipline + execution strategy). |
 | `setup.sh`                   | Inert no-op (see below).                                            |
 
 There is **no `init` flow** (superpowers is zero-setup, unlike AIF), **no

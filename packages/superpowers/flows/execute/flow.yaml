@@ -40,7 +40,7 @@ nodes:
   - id: intake
     type: form
     settings:
-      form_schema: ./schemas/intake.json
+      form_schema: ./schemas/execute-intake.json
     transitions:
       success: execute
 
