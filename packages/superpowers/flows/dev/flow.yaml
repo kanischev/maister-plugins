@@ -18,9 +18,10 @@ runner_profiles:
     provider:
       kind: anthropic
 # Typed artifacts -> engine_min >= 1.2.0; retry/session policies -> >= 1.4.0;
-# first-class sessions (M42, ADR-114) -> engine_min >= 2.0.0.
+# first-class sessions (M42, ADR-114) -> engine_min >= 2.0.0; typed Plan-review
+# artifacts and decisions -> >= 3.1.0.
 compat:
-  engine_min: 2.0.0
+  engine_min: 3.1.0
 # Rework re-entry resumes the prior ACP session by default; the review->fix loop
 # overrides with session_policy: new_session for a clean re-attempt.
 defaults:
@@ -28,7 +29,7 @@ defaults:
 # M42 (ADR-114): first-class sessions split the reused agent context into
 # fresh-context phases — implement / verify / fix / finalize — each inheriting
 # the flow's one claude-code runner (no new runners). State flows through the
-# typed artifacts (design-spec, plan-doc, impl-diff, gate result), not session
+# typed artifacts (design-spec, plan-document, impl-diff, gate result), not session
 # memory. Design + planning (brainstorm, plan) stay on the implicit `default`
 # session.
 sessions:
@@ -127,19 +128,40 @@ nodes:
 
         Reviewer feedback from a prior plan_review (empty on first pass):
         {{ plan_review_comments }}
+
+        Typed Plan-review answers from a prior decision cycle (empty on first pass):
+        {{ plan_review_answers }}
+
+        Write the final Markdown implementation plan to $MAISTER_PLAN_DOCUMENT_FILE.
+        Write its strict PlanReviewV1 JSON companion to $MAISTER_PLAN_REVIEW_FILE.
+        Classify non-blocking assumptions separately from blocking decisions. Every
+        decision must offer 2-8 concrete options with stable ids and consequences;
+        never infer choices from prose or copy secret values into either artifact.
     input:
       requires:
         - artifact: design-spec
           kind: generic_file
     output:
       produces:
-        - id: plan-doc
-          kind: generic_file
+        - id: plan-document
+          kind: plan
+          current: true
+        - id: plan-review
+          kind: plan
+          current: true
     transitions:
       success: plan_review
 
   - id: plan_review
     type: human
+    settings:
+      plan_review:
+        plan_document_artifact: plan-document
+        plan_review_artifact: plan-review
+        comments_var: plan_review_comments
+        answers_var: plan_review_answers
+        rework_transition: rework
+        max_decision_reworks: 2
     finish:
       human:
         role: maintainer
@@ -179,8 +201,8 @@ nodes:
         - STOP after all plan tasks are implemented, tested, and committed. Do NOT run finishing-a-development-branch and do NOT merge/push — later MAIster nodes verify, review, and finalize.
     input:
       requires:
-        - artifact: plan-doc
-          kind: generic_file
+        - artifact: plan-document
+          kind: plan
     output:
       produces:
         - id: impl-diff
