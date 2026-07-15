@@ -9,7 +9,7 @@ design rationale: [`specs/`](specs/).
 - **Provenance:** superpowers (MIT, Jesse Vincent); all 14 skills vendored
   under `packages/superpowers/capability/skills/`.
 - **Vendored upstream version:** `5.1.0`.
-- **Pin:** git tag `superpowers/vX.Y.Z` (current line `superpowers/v1.0.0`).
+- **Pin:** git tag `superpowers/vX.Y.Z` (current line `superpowers/v1.2.0`).
 
 ## The methodology
 
@@ -164,9 +164,9 @@ is unavailable). Recommended follow-up: a live spike before relying on
 ## Policies & artifacts
 
 - Runner `claude-code` (`claude` / `claude-opus-4-8` / `anthropic`).
-- `compat.engine_min: 1.4.0` (typed artifacts + `retry_policy` +
-  `session_policy`; `sp-plan` also uses an M29 `must_touch` mutation gate, ≥
-  1.3.0).
+- `sp-dev` and `sp-plan` require `compat.engine_min: 3.1.0` for typed
+  Plan-review artifacts and decisions; `sp-debug` and `sp-execute` require
+  `2.0.0`.
 - `defaults.session_policy: resume`; `retry_policy` on every `ai_coding` node.
 - `verdict_calibration.confidence_min: 0.7` (advisory `ai_judgment` review gate;
   omitted on `sp-plan`).

@@ -40,7 +40,7 @@ Per-package reference docs and design specs live under [`docs/`](docs/):
 
 ## Versioning
 
-Per-package git tags: **`<name>/vX.Y.Z`** (e.g. `aif/v2.0.0`). The tag is the
+Per-package git tags: **`<name>/vX.Y.Z`** (e.g. `aif/v2.5.0`). The tag is the
 user-facing pin; MAIster resolves it to a commit SHA at install time and the
 SHA is runtime truth (content-addressed cache, immutable revisions). A
 package release tags only its own name — packages version independently.
@@ -49,7 +49,7 @@ package release tags only its own name — packages version independently.
 
 - **Target shape** (MAIster package management, P1+): one `packages[]` entry
   in the project's `maister.yaml` —
-  `{ id: aif, source: <this repo URL>, version: aif/v2.0.0, path: packages/aif }` —
+  `{ id: aif, source: <this repo URL>, version: aif/v2.5.0, path: packages/aif }` —
   or, with the platform catalog (P2), add this repo as a package source in
   `/settings` and install/attach from the UI.
 - **Until then**: per-flow wiring — five `flows[]` entries pointing at
@@ -70,3 +70,17 @@ Two channels:
 
 Local iteration without publishing: point a MAIster project at a local
 checkout (`file://` source / local package version) and run flows against it.
+
+## Releasing a package
+
+Create package tags through the release wrapper so the compatibility gate runs
+against the exact clean checkout before a tag exists:
+
+```sh
+MAISTER_REPO=/path/to/mAIster ./scripts/release-package.sh aif v2.6.0
+```
+
+The gate validates the package manifest, graph-only `nodes[]` manifests,
+compilation, engine range, package-root schema materialization, and a real
+Postgres-backed package install. MAIster engine changes run the same gate over
+every discoverable `<package>/vX.Y.Z` tag in this repository.

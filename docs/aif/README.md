@@ -8,7 +8,7 @@ quick-start: [`packages/aif/README.md`](../../packages/aif/README.md).
 - **Provenance:** AI Factory `2.x` (Apache-2.0); skills + subagents vendored
   under `packages/aif/capability/`. Extracted from the MAIster repo
   (`plugins/aif @ maister@c104f66b`, 2026-06-12).
-- **Pin:** git tag `aif/vX.Y.Z` (current line `aif/v2.0.0`).
+- **Pin:** git tag `aif/vX.Y.Z` (current line `aif/v2.5.0`).
 
 ## Flows
 
@@ -53,7 +53,9 @@ A consuming project registers it as one shared `capability_imports` bundle
 ## Policies & gates
 
 - Runner `claude-code` (`claude` / `claude-opus-4-8` / `anthropic`);
-  `compat.engine_min: 1.4.0`; `defaults.session_policy: resume`.
+  `aif-dev` requires `compat.engine_min: 3.1.0` for typed Plan-review
+  artifacts and decisions, while `aif-bugfix`, `aif-evolve`, `aif-roadmap`,
+  and `aif-init` require `2.0.0`; `defaults.session_policy: resume`.
 - `retry_policy` on every `ai_coding` node (auto-retry `SPAWN`,
   `EXECUTOR_UNAVAILABLE`, `CHECKPOINT`, `ACP_PROTOCOL`;
   `rewind-to-node-checkpoint`).

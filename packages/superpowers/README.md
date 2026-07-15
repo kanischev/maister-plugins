@@ -10,6 +10,12 @@ This package is self-contained; nothing here imports from MAIster core.
 Versioned by per-package git tags: `superpowers/vX.Y.Z` (see the repo root
 README).
 
+## What changed in `superpowers/v1.2.0`
+
+Adds typed Plan-review artifacts and declarative review decisions. `sp-dev`
+and `sp-plan` now require `compat.engine_min: 3.1.0`; `sp-debug` and
+`sp-execute` retain their `2.0.0` floor.
+
 ## What changed in `superpowers/v1.1.1`
 
 Moves the `sp-dev` and `sp-execute` intake forms to package-root `schemas/`.
@@ -92,7 +98,7 @@ A consuming project's `maister.yaml` registers this package:
 packages:
   - id: superpowers
     source: github.com/<org>/maister-plugins
-    version: superpowers/v1.1.0
+    version: superpowers/v1.2.0
     path: packages/superpowers
 ```
 

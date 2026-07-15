@@ -8,6 +8,12 @@ MAIster flows backed by a shared skills + subagents bundle.
 This package is self-contained; nothing here imports from MAIster core.
 Versioned by per-package git tags: `aif/vX.Y.Z` (see the repo root README).
 
+## What changed in `aif/v2.5.0`
+
+Adds typed Plan-review artifacts and declarative review decisions. `aif-dev`
+now requires `compat.engine_min: 3.1.0`; `aif-bugfix`, `aif-evolve`,
+`aif-roadmap`, and `aif-init` retain their `2.0.0` floor.
+
 ## What changed in `aif/v2.4.0`
 
 Moves the AIF form schemas to package-root `schemas/`, which is the MAIster
