@@ -19,3 +19,9 @@ capabilities:
 # Core agents reach MAIster through the built-in facade; no package-shipped MCP
 # server templates are required.
 mcps: []
+# Package-sourced Evaluation Methods (M46, ADR-140). `sdd-quality` is the default
+# Evaluation Lab method; it requires MAIster engine >= 3.2.0. Older MAIster
+# control planes ignore this key entirely (they treat the package as having no
+# evaluation methods), so this addition is backward compatible.
+evaluationMethods:
+  - { id: sdd-quality, path: evaluation-methods/sdd-quality }

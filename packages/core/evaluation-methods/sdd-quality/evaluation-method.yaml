@@ -1,0 +1,145 @@
+# SDD Quality — the default MAIster Evaluation Method (M46, ADR-140).
+#
+# Operationalized spec-driven-development rubric with observable 0..5 anchors,
+# weighted criteria, and a disagreement-aware panel. This file is INERT package
+# content: MAIster parses it before trust, but no prompt, check, or aggregation
+# runs until the method is enabled, trusted, and engine-compatible.
+#
+# Portability contract: no concrete runner/model/secret/MCP ids. Aggregation and
+# objective checks resolve only through MAIster's closed platform registries.
+schemaVersion: 1
+id: sdd-quality
+name: SDD Quality
+description: >-
+  Evaluates how well a Run realizes a spec-driven task: fidelity to the
+  acceptance criteria, demonstrated correctness, scope completeness,
+  maintainability, and test evidence. Objective facts are kept separate from
+  judge opinion; missing evidence is scored as insufficient, never zero.
+
+modes:
+  - absolute
+  - n_way
+
+groundTruth:
+  required: true
+  description: >-
+    The task prompt plus its acceptance criteria and any linked spec are the
+    shared ground truth. Every judge sees the identical frozen evidence snapshot.
+
+evidence:
+  captureBudgetBytes: 4000000
+  requiredCoverage:
+    - task
+    - source_manifest
+    - diff
+    - gates
+    - artifacts
+  description: >-
+    Bounded, commit-anchored evidence: task + acceptance criteria, a source
+    manifest and bounded diff at the participant's watermark SHA, recorded gate
+    outcomes, and produced artifacts. Uncommitted work is reported as
+    uncommitted_not_captured, never silently included.
+
+# Objective facts. All are non-gating metrics by default so the method works on
+# any project without operator host-check setup; a judge MAY cite them but MUST
+# NOT infer PASS from source appearance.
+objectiveChecks:
+  - id: gates
+    provider: gate_result@1
+    policy: metric
+    description: Recorded blocking/advisory gate outcomes for the Run.
+  - id: artifacts
+    provider: artifact_completeness@1
+    policy: metric
+    description: Whether the Flow's required produced artifacts are present.
+  - id: contracts
+    provider: schema_contract@1
+    policy: metric
+    description: Schema/contract validation results for produced artifacts.
+  - id: diff-stats
+    provider: diff_stats@1
+    policy: metric
+    description: Source/diff manifest statistics (files, additions, deletions).
+
+criteria:
+  - id: spec-fidelity
+    name: Spec fidelity
+    weight: 0.30
+    scale: { min: 0, max: 5 }
+    naPolicy: insufficient_evidence
+    anchors:
+      - { score: 0, label: "Ignores or contradicts the acceptance criteria" }
+      - { score: 2, label: "Meets some criteria; notable requirements unmet" }
+      - { score: 4, label: "Meets all criteria with minor interpretation gaps" }
+      - { score: 5, label: "Fully and faithfully satisfies every acceptance criterion" }
+  - id: correctness
+    name: Demonstrated correctness
+    weight: 0.25
+    scale: { min: 0, max: 5 }
+    naPolicy: insufficient_evidence
+    anchors:
+      - { score: 0, label: "Evidence shows it does not work" }
+      - { score: 2, label: "Partially works; failing gates or unhandled cases" }
+      - { score: 4, label: "Works; gates pass with small residual risk" }
+      - { score: 5, label: "Clearly correct, corroborated by gates/artifacts" }
+  - id: completeness
+    name: Scope completeness
+    weight: 0.15
+    scale: { min: 0, max: 5 }
+    naPolicy: insufficient_evidence
+    anchors:
+      - { score: 0, label: "Large parts of the required scope are missing" }
+      - { score: 3, label: "Core scope done; edges or wiring incomplete" }
+      - { score: 5, label: "Entire required scope delivered and wired" }
+  - id: maintainability
+    name: Maintainability
+    weight: 0.15
+    scale: { min: 0, max: 5 }
+    naPolicy: insufficient_evidence
+    anchors:
+      - { score: 0, label: "Unreadable, unidiomatic, or gratuitously complex" }
+      - { score: 3, label: "Acceptable but uneven naming/structure" }
+      - { score: 5, label: "Clean, idiomatic, minimal, matches surrounding code" }
+  - id: test-evidence
+    name: Test evidence
+    weight: 0.15
+    scale: { min: 0, max: 5 }
+    naPolicy: insufficient_evidence
+    anchors:
+      - { score: 0, label: "No tests where the task or convention expects them" }
+      - { score: 3, label: "Some tests; coverage of the change is partial" }
+      - { score: 5, label: "Meaningful tests that exercise the changed behavior" }
+
+caps:
+  totalMax: 5
+
+judges:
+  roles:
+    - id: reviewer
+      name: Independent reviewer
+      count: 3
+      promptTemplate: prompts/judge.md
+      description: >-
+        An independent evaluator scoring one participant against the rubric over
+        the bounded evidence snapshot. Attempts are blind to each other.
+  resultSchema: schemas/judge-result.schema.json
+
+aggregation:
+  algorithm: weighted_mean@1
+
+panelPolicy:
+  quorum: 2
+  timeoutSeconds: 900
+  maxRetries: 1
+  onInvalidOutput: repair_then_exclude
+  onMissingJudge: exclude
+  disagreement:
+    scoreSpreadThreshold: 1.5
+    confidenceSpreadThreshold: 0.4
+    escalateOnConflict: true
+
+report:
+  primaryView: scoreboard
+
+compat:
+  engine_min: 3.2.0

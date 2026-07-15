@@ -8,6 +8,11 @@ First-party platform agents and shared skills that ship with MAIster.
   `core:<file-stem>`.
 - `capability/skills/` — shared skills materialized into supported agent
   runtimes from the installed package revision.
+- `evaluation-methods/sdd-quality/` — the default MAIster Evaluation Lab method
+  (M46, ADR-140): an operationalized spec-driven-development rubric with a
+  strict judge result schema. Requires MAIster engine `>= 3.2.0`; older control
+  planes ignore the `evaluationMethods` key. Content is inert until trusted and
+  engine-compatible.
 - No flows or MCP server templates. Core agents use MAIster's built-in MCP
   facade and ephemeral agent tokens.
 
