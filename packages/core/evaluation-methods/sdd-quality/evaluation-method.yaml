@@ -1,4 +1,4 @@
-# SDD Quality — the default MAIster Evaluation Method (M46, ADR-140).
+# SDD Quality — the default MAIster Evaluation Method (M46, ADR-143).
 #
 # Operationalized spec-driven-development rubric with observable 0..5 anchors,
 # weighted criteria, and a disagreement-aware panel. This file is INERT package
