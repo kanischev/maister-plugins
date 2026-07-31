@@ -36,4 +36,6 @@ services:
       - .:/work
     environment:
       FIXTURE_RED: ${FIXTURE_RED:-}
-    command: sh -c "npm ci --no-audit --no-fund && npx playwright test --reporter=line"
+    # Reporters come from playwright.config.ts (line + html) — a CLI
+    # --reporter flag would REPLACE the list and drop the html report.
+    command: sh -c "npm ci --no-audit --no-fund && npx playwright test"
