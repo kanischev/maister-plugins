@@ -70,13 +70,44 @@ docker ps --filter "name=maister-run-"       # find stranded containers
 docker compose -p maister-run-<id> down --volumes --remove-orphans
 ```
 
-## Fixture
+## Requirements
 
-`examples/fixture/` (nginx web + postgres db + Playwright runner under
-profile `e2e`, green + toggleable red spec) and
-`examples/bootstrap-fixture.sh [--red] <target>` bootstrap a ready-to-register
-consuming project. Note: the runner performs `npm ci` — "fully internal"
-means zero **published ports**, not zero network egress.
+- **Web-tier Docker socket**: `cli`/`check` nodes execute on the MAIster web
+  tier — the Docker daemon + compose v2 must live on that host. The flow's
+  `requirements` probes (`docker info`, `docker compose version`,
+  `test -f .maister-env-e2e.sh`) refuse launch actionably before any
+  worktree/session/token spend.
+- **Engine ≥ 3.3.0** (`MAISTER_FLOW_DIR`, platform ADR-154). Older engines
+  fail at the command's `${MAISTER_FLOW_DIR:?…}` guard with a one-line
+  remediation.
+- **Timeout budget**: the node declares 900 s; the host ceiling is
+  `MAISTER_MAX_CLI_TIMEOUT_MS` (default 1 h). On deployments predating the
+  timeoutMs wiring the default 300 s applies — the fixture fits it; size
+  your project's suite (or raise the ceiling) accordingly.
+- **Image pre-pull**: run `examples/bootstrap-fixture.sh` (or pre-pull your
+  stack's images) so the first run's `up --wait` fits the budget.
+- **npm egress**: the runner performs `npm ci` — "fully internal" means zero
+  **published ports**, not zero network egress.
 
-<!-- T12 completes: Requirements deep-dive, config reference details, fixture
-walkthrough, docs/env-e2e/README.md deep reference, repo index rows. -->
+## Fixture walkthrough
+
+```bash
+packages/env-e2e/examples/bootstrap-fixture.sh /path/to/fx-green
+packages/env-e2e/examples/bootstrap-fixture.sh --red /path/to/fx-red
+```
+
+Each bootstrap refuses a non-empty target, copies the fixture (healthchecked
+nginx `web` + postgres `db`, Playwright runner under compose profile `e2e`,
+committed lockfile pinned to the runner image version, green `home.spec.ts` +
+toggleable `red.spec.ts`), writes `maister.yaml` + `.maister-env-e2e.sh`
+(`--red` appends `E2E_ENV=(FIXTURE_RED=1)`), git-inits, pre-pulls images, and
+prints the registration steps. Green ends done-side; red exercises
+fail → rework → converge/escalate. Running green + red simultaneously is the
+concurrency proof (distinct `maister-run-*` compose projects).
+
+## See also
+
+- [Design spec (SSOT)](../../docs/env-e2e/specs/2026-07-31-env-e2e-design.md)
+- [Deep reference](../../docs/env-e2e/README.md) — node walkthrough, result
+  contract, failure-class table, script phase machine
+- `tests/test-run-e2e.sh` — the 10-case script harness (docker required)

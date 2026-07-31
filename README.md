@@ -27,6 +27,7 @@ packages/
 | [`core-react`](packages/core-react/) | React and TypeScript frontend skills for components, state and data flow, accessibility, testing, and performance. |
 | [`core-pg`](packages/core-pg/) | PostgreSQL skills for schema design, migrations, query tuning, indexing, transactions, reliability, and operations. |
 | [`core-skill-authoring`](packages/core-skill-authoring/) | Skill-authoring skills for designing, structuring, validating, testing, and maintaining reusable MAIster agent skills. |
+| [`env-e2e`](packages/env-e2e/) | Ephemeral docker-compose env + Playwright e2e as readiness evidence: 1 flow (`env-e2e`) whose `check` node owns up→seed→test→capture→down atomically (engine ≥ 3.3.0, `MAISTER_FLOW_DIR`); red suites drive a bounded fix loop, exhaustion escalates to a human — never auto-ship. |
 
 ## Documentation
 

@@ -16,6 +16,7 @@ through `maister.yaml packages[]`, pinned by a per-package git tag
 | `bmad-bmm` | [bmad-bmm/](bmad-bmm/README.md) | `bmm-plan`, `bmm-dev-story`, `bmm-quick-dev` | BMAD Method v6 BMM SDLC: 6 platform-agent personas + 26 vendored BMM skills (`github.com/bmad-code-org/BMAD-METHOD@v6.8.0`) |
 | `bmad-tea` | [bmad-tea/](bmad-tea/README.md) | `tea-test-design`, `tea-automate`, `tea-nfr`, `tea-trace`, `tea-test-review` | BMAD Test Architect: Murat platform agent + 9 vendored testarch skills (`github.com/bmad-code-org/bmad-method-test-architecture-enterprise@v1.19.0`) |
 | `bmad-cis` | [bmad-cis/](bmad-cis/README.md) | `cis-discovery` | BMAD Creative Intelligence Suite: 6 creative platform-agent personas + 4 vendored creative skills (`github.com/bmad-code-org/bmad-module-creative-intelligence-suite@v0.2.1`) |
+| `env-e2e` | [env-e2e/](env-e2e/README.md) | `env-e2e` | Ephemeral compose env + Playwright e2e as readiness evidence: atomic `check`-node lifecycle script (`MAISTER_FLOW_DIR`, engine ≥ 3.3.0), verdict-routed rework loop, trap-guaranteed teardown; no capability bundle |
 
 ## What every package documents
 
