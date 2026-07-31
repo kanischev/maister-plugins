@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "fields": [
+    {
+      "name": "verdict",
+      "label": "E2e verdict (routes the graph: pass -> done, fail -> rework)",
+      "type": "enum",
+      "required": true,
+      "options": ["pass", "fail"]
+    },
+    {
+      "name": "summary",
+      "label": "One-line human summary of the run",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "e2e_comments",
+      "label": "Failing block carried into the next implement attempt",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "stats",
+      "label": "Optional counters from the runner output",
+      "type": "object",
+      "required": false,
+      "fields": [
+        { "name": "total", "type": "number" },
+        { "name": "passed", "type": "number" },
+        { "name": "failed", "type": "number" }
+      ]
+    }
+  ]
+}

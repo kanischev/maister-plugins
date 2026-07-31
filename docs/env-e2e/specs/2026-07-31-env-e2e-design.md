@@ -42,7 +42,7 @@ k8s or non-compose providers, external CI ingestion (`external_check`).
 | FR-8 | **Preflight requirements** (ADR-091): `docker info`, `docker compose version`, `test -f .maister-env-e2e.sh` — launch is refused (`PRECONDITION`, with hints) before any worktree/session/token spend. |
 | FR-9 | **Teardown guaranteed** on all script exit paths: trap on EXIT/TERM/INT armed BEFORE the first compose call runs best-effort capture then `docker compose -p <proj> down --volumes --remove-orphans --timeout 10`. Group-TERM tolerance: the trap spawns FRESH `docker compose` processes (they are not in the signal batch of a process-group TERM). Residual risk: SIGKILL (30 s engine grace exceeded, 4 MiB output cap, hard web-process crash) strands the env → documented sweep (FR-13). |
 | FR-10 | **Sanitized child env**: every docker invocation runs under `env -i PATH="$PATH" HOME="$HOME" COMPOSE_PROJECT_NAME="<proj>" <E2E_ENV pairs>` — defense-in-depth over platform ADR-153; web-tier values beyond that set MUST NOT reach compose interpolation or containers. |
-| FR-11 | **Packaged-script materialization**: `scripts/run-e2e.sh` is the SSOT file, executed via `bash "${MAISTER_FLOW_DIR:?env-e2e requires MAIster engine >= 3.3.0 (MAISTER_FLOW_DIR missing)}/scripts/run-e2e.sh" "maister-run-{{ run.id }}"`; `compat.engine_min: 3.3.0`. The install dir is read-only: the script writes ONLY to the worktree cwd and the run dir. |
+| FR-11 | **Packaged-script materialization**: `flows/env-e2e/scripts/run-e2e.sh` is the SSOT file (shipped INSIDE the flow dir — `MAISTER_FLOW_DIR` is the installed FLOW revision dir, which materializes the flow subdir plus package-root `schemas/`, NOT other package-root dirs; verified against the platform installer, `web/lib/flows.ts` copy + `materializePackageRootSchemas`). Executed via `bash "${MAISTER_FLOW_DIR:?env-e2e requires MAIster engine >= 3.3.0 (MAISTER_FLOW_DIR missing)}/scripts/run-e2e.sh" "maister-run-{{ run.id }}"`; `compat.engine_min: 3.3.0`. The install dir is read-only: the script writes ONLY to the worktree cwd and the run dir. |
 | FR-12 | **Timeout budget**: the `e2e` node declares `settings.timeoutMs: 900000` (≤ the 1 h `MAISTER_MAX_CLI_TIMEOUT_MS` host ceiling); the fixture completes in < 300 s so the package also works on deployments predating the timeoutMs fix (default 300 s). |
 | FR-13 | **Orphan sweep documented** (crash-only cases): `docker compose ls --filter name=maister-run-` / `docker ps --filter "name=maister-run-"`; stray teardown `docker compose -p maister-run-<id> down --volumes --remove-orphans`. |
 | FR-14 | **Fixture + bootstrap**: `examples/fixture/` (web nginx + db postgres + playwright runner under profile `e2e`, green + toggleable red spec) and `examples/bootstrap-fixture.sh [--red] <target>`; green + red instances double as the concurrency pair. |
@@ -256,6 +256,10 @@ budget); prints the registration/install/launch steps. `--red` reaches the
 test process via `E2E_ENV` → `docker compose run -e FIXTURE_RED=1`.
 
 ## 8. Edge-case inventory (drives the T-RED harness)
+
+The harness stubs `MAISTER_FLOW_DIR` to the package checkout's
+`packages/env-e2e/flows/env-e2e` dir (the flow dir — what a real install
+materializes) and `MAISTER_OUTPUT_FILE` to a file in a temp run dir.
 
 Harness cases (one behavior each; ALL must be RED against the T3 stub):
 

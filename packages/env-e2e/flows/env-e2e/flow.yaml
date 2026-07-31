@@ -1,0 +1,134 @@
+schemaVersion: 1
+name: env-e2e
+metadata:
+  title: "Env-e2e"
+  summary: "Implement → prove it: the change is verified by the project's Playwright e2e suite inside an ephemeral, fully internal docker-compose environment (zero published ports, guaranteed teardown). A red suite drives a bounded fix loop; loop exhaustion escalates to a human reviewer with the red report — `pass` is the only path to done."
+  labels: [e2e, verification, quality]
+  route_when: "The change must be proven by the project's e2e suite in an isolated compose environment before promotion."
+  links:
+    - { kind: docs, title: "Design spec (SSOT)", url: "https://github.com/albertkanischev/maister-plugins/blob/main/docs/env-e2e/specs/2026-07-31-env-e2e-design.md" }
+runner_profiles:
+  claude-code:
+    capability_agent: claude
+    adapter: claude
+    model: claude-opus-4-8
+    provider:
+      kind: anthropic
+# MAISTER_FLOW_DIR (ADR-154) → >= 3.3.0; also covers output.result (1.3.0),
+# produces (1.2.0), decide (1.7.0), onExhaustion/resetTargets (2.1.0).
+compat:
+  engine_min: 3.3.0
+defaults:
+  session_policy: resume
+# FR-8: refuse launch BEFORE any worktree/session/token spend. Probes run on
+# the WEB tier in the project repo — the Docker socket must live there.
+requirements:
+  - name: "docker daemon reachable on the web tier"
+    probe: "docker info"
+    hint: "install/start Docker on the host running the MAIster web tier (cli/check nodes execute there)"
+  - name: "docker compose v2 available"
+    probe: "docker compose version"
+    hint: "install the docker compose v2 plugin on the web tier"
+  - name: ".maister-env-e2e.sh config present"
+    probe: "test -f .maister-env-e2e.sh"
+    hint: "create .maister-env-e2e.sh at the repo root (see the env-e2e package README: E2E_COMPOSE_FILES + E2E_RUNNER_SERVICE)"
+nodes:
+  - id: implement
+    type: ai_coding
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        {{ task.prompt }}
+
+        Non-interactive run — do NOT ask the user clarifying questions; proceed
+        autonomously (tool-use permission prompts are handled by the platform).
+
+        The change will be verified by the project's Playwright e2e suite
+        running in an isolated docker-compose environment (`.maister-env-e2e.sh`
+        describes the stack). Make the suite pass; do not weaken or skip tests
+        to get green.
+
+        Feedback from the previous e2e attempt (empty on the first pass):
+        {{ e2e_comments }}
+
+        Reviewer guidance after loop exhaustion (empty unless a human
+        escalation happened):
+        {{ review_comments }}
+    output:
+      produces:
+        - id: impl-diff
+          kind: diff
+    transitions:
+      success: e2e
+
+  # FR-1: ONE check node owns the env lifecycle atomically; the packaged
+  # script (SSOT) is executed from the installed revision via MAISTER_FLOW_DIR
+  # (FR-11) — the :? guard turns a pre-3.3.0 engine into an actionable failure.
+  # FR-5: the script exits 0 whenever tests executed; the verdict routes via
+  # decide below. Non-zero exit = config/env failure class → run Failed.
+  - id: e2e
+    type: check
+    # FR-12: 900 s budget (≤ the 1 h MAISTER_MAX_CLI_TIMEOUT_MS host ceiling).
+    settings:
+      timeoutMs: 900000
+    action:
+      command: 'bash "${MAISTER_FLOW_DIR:?env-e2e requires MAIster engine >= 3.3.0 (MAISTER_FLOW_DIR missing)}/scripts/run-e2e.sh" "maister-run-{{ run.id }}"'
+    output:
+      result:
+        schema: ./schemas/e2e-result.json
+        required: true
+      # FR-4: evidence on BOTH verdicts, re-produced every attempt; the
+      # requiredFor currency is the green-path promotion gate (spec §3 inv. 4).
+      produces:
+        - id: e2e-report
+          kind: test_report
+          path: e2e-report.tar.gz
+          requiredFor: [review, merge]
+        - id: e2e-logs
+          kind: log
+          path: e2e-compose-logs.txt
+    decide:
+      from: output.verdict
+    transitions:
+      pass: done
+      fail: implement
+      escalate: review
+    # FR-6: the failing block travels as the e2e_comments result field.
+    # Exhaustion routes to the human review node — never auto-ship (ADR-118).
+    rework:
+      allowedTargets: [implement]
+      workspacePolicies: [keep]
+      maxLoops: 3
+      commentsVar: e2e_comments
+      onExhaustion: escalate
+
+  # Escalation surface — reached ONLY via onExhaustion. The blocking
+  # artifact_required gate is HERE (not on e2e: produces-recording runs after
+  # a node's own pre_finish gates — spec §3 invariant 4): review cannot
+  # complete without the current red report. The only decision restarts the
+  # loop with a fresh budget (resetTargets); giving up is the run-level
+  # abandon action, so no decision can reach `done`.
+  - id: review
+    type: human
+    pre_finish:
+      gates:
+        - id: e2e-report-required
+          kind: artifact_required
+          mode: blocking
+          inputArtifacts: [e2e-report]
+    finish:
+      human:
+        role: maintainer
+        decisions: [rework]
+        commentsVar: review_comments
+    transitions:
+      rework: implement
+    rework:
+      allowedTargets: [implement]
+      workspacePolicies: [keep]
+      maxLoops: 3
+      commentsVar: review_comments
+      resetTargets: [e2e]

@@ -1,0 +1,16 @@
+# MAIster package manifest. Contract: docs/pv/package-management.md (MAIster
+# repo) — flows[].id MUST equal each flow.yaml `name`; paths are
+# package-root-relative; the version pin is the git tag (env-e2e/vX.Y.Z),
+# never a field in this file.
+schemaVersion: 1
+name: env-e2e
+metadata:
+  title: "Env-e2e"
+  summary: "Ephemeral docker-compose environment + Playwright e2e as readiness evidence: one check node owns up→seed→test→capture→down atomically; red suites drive a bounded fix loop and escalate to a human — never auto-ship."
+  links:
+    - { kind: docs, title: "Design spec (SSOT)", url: "https://github.com/albertkanischev/maister-plugins/blob/main/docs/env-e2e/specs/2026-07-31-env-e2e-design.md" }
+    - { kind: docs, title: "Package reference", url: "https://github.com/albertkanischev/maister-plugins/blob/main/docs/env-e2e/README.md" }
+flows:
+  - { id: env-e2e, path: flows/env-e2e }
+# Pure script package: no capability bundle, no agents, no setup.sh, no MCPs.
+mcps: []
