@@ -1,0 +1,39 @@
+# env-e2e fixture stack — ZERO published ports (FR-2): services are reachable
+# only by compose-network DNS; the runner joins the same network.
+services:
+  web:
+    image: nginx:alpine
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: app
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d app"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  # The Playwright runner is a compose PROFILE service owned by this file:
+  # `docker compose --profile e2e run --rm e2e` — never started by plain `up`.
+  # Image version matches the pinned @playwright/test so browsers fit the lib.
+  e2e:
+    image: mcr.microsoft.com/playwright:v1.60.0-noble
+    profiles: ["e2e"]
+    depends_on:
+      web:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    working_dir: /work
+    volumes:
+      - .:/work
+    environment:
+      FIXTURE_RED: ${FIXTURE_RED:-}
+    command: sh -c "npm ci --no-audit --no-fund && npx playwright test --reporter=line"
