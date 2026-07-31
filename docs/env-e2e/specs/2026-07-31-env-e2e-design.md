@@ -209,9 +209,9 @@ unset.
 | 3 | `preflight` | `docker info`, `docker compose version` (sanitized env). | `env` |
 | 4 | `up` | `docker compose -p <proj> -f … up -d --wait --wait-timeout "${E2E_WAIT_TIMEOUT:-120}"`. | `env` |
 | 5 | `seed` | `bash -c "$E2E_SEED_COMMAND"` when set (sanitized env + `E2E_COMPOSE`). | `env` |
-| 6 | `test` | `docker compose -p <proj> -f … --profile e2e run --rm [-e E2E_ENV…] "$E2E_RUNNER_SERVICE"` under `set +e`; exit code captured; output tee'd to `$RUN_DIR/test-output.log` and stdout. | never fails the script (exit code = verdict) |
+| 6 | `test` | `docker compose -p <proj> -f … --profile e2e run --rm -T [-e E2E_ENV…] "$E2E_RUNNER_SERVICE"` under `set +e` (`-T`: no pseudo-TTY — deterministic non-interactive output); exit code captured; output tee'd to `$WORK_DIR/test-output.log` and stdout. | never fails the script (exit code = verdict) |
 | 7 | `capture` | ALWAYS both files: tar worktree `playwright-report/` + `test-results/` + `test-output.log` → `$RUN_DIR/e2e-report.tar.gz` (missing dirs → `MISSING-REPORT.txt` marker inside the tar, never a skipped artifact); `docker compose … logs --no-color > $RUN_DIR/e2e-compose-logs.txt`. | `env` (capture must succeed on exit-0 paths — the produces backstop needs both files) |
-| 8 | `result` | Build JSON (§4) from the runner exit code + `test-output.log` tail; write to `$MAISTER_OUTPUT_FILE`; print the failing block last on stdout. | `env` |
+| 8 | `result` | Build JSON (§4) from the runner exit code + the ANSI-stripped `test-output.log` (reporters emit cursor/color codes even without a TTY — counters and the failing tail are stripped before extraction); write to `$MAISTER_OUTPUT_FILE`; print the failing block last on stdout. | `env` |
 | 9 | `down` | Via the trap: best-effort capture (if not yet done) then `down --volumes --remove-orphans --timeout 10`; then exit 0 (verdict paths) / original non-zero (config/env). | — |
 
 **Failure classes:** `config` — wrong invocation/config, nothing was created,

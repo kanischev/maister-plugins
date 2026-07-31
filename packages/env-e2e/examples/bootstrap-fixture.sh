@@ -39,6 +39,7 @@ cat > "$TARGET/maister.yaml" <<EOF
 schemaVersion: 2
 project:
   name: $PROJECT_NAME
+flows: []
 EOF
 
 if [[ "$RED" == "1" ]]; then

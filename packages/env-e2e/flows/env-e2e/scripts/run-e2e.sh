@@ -104,15 +104,25 @@ json_escape() {
   }'
 }
 
+# Reporters emit ANSI cursor/color codes even without a TTY; JSON.parse
+# rejects RAW control chars in strings (the engine hard-fails the attempt
+# with CONFIG on invalid JSON — found live on the red path). Strip CSI
+# sequences, then delete every remaining control char except \t \n \r
+# (json_escape encodes those). BSD sed has no \x escapes — splice a literal
+# ESC via printf.
+strip_ansi() {
+  sed "s/$(printf '\033')\[[0-9;]*[A-Za-z]//g" | tr -d '\000-\010\013\014\016-\037'
+}
+
 write_result() { # $1 = verdict
   local verdict="$1" summary_raw comments_raw
 
-  summary_raw="$(grep -E '^[[:space:]]*[0-9]+ (passed|failed|skipped|flaky|did not run)' "$TEST_LOG" 2>/dev/null | tail -4 | tr '\n' ' ' | sed 's/  */ /g; s/ $//' || true)"
+  summary_raw="$(strip_ansi < "$TEST_LOG" 2>/dev/null | grep -E '^[[:space:]]*[0-9]+ (passed|failed|skipped|flaky|did not run)' | tail -4 | tr '\n' ' ' | sed 's/  */ /g; s/ $//' || true)"
   if [[ -z "$summary_raw" ]]; then
     summary_raw="runner service exited with code $TEST_EXIT"
   fi
   if [[ "$verdict" == "fail" ]]; then
-    comments_raw="$(tail -40 "$TEST_LOG" 2>/dev/null || true)"
+    comments_raw="$(tail -40 "$TEST_LOG" 2>/dev/null | strip_ansi || true)"
     if [[ -z "$comments_raw" ]]; then
       comments_raw="runner failed with exit code $TEST_EXIT and produced no output"
     fi
@@ -233,7 +243,7 @@ fi
 
 phase test "compose run --rm $E2E_RUNNER_SERVICE"
 set +e
-dockerc compose "${COMPOSE_ARGS[@]}" --profile e2e run --rm \
+dockerc compose "${COMPOSE_ARGS[@]}" --profile e2e run --rm -T \
   ${RUN_ENV_FLAGS[@]+"${RUN_ENV_FLAGS[@]}"} "$E2E_RUNNER_SERVICE" 2>&1 | tee "$TEST_LOG"
 TEST_EXIT="${PIPESTATUS[0]}"
 set -e
