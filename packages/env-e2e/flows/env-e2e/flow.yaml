@@ -20,8 +20,11 @@ compat:
   engine_min: 3.3.0
 defaults:
   session_policy: resume
-# FR-8: refuse launch BEFORE any worktree/session/token spend. Probes run on
-# the WEB tier in the project repo — the Docker socket must live there.
+# FR-8: refuse launch BEFORE any worktree/session/token spend. Probes are
+# HOST invariants only — they run on the WEB tier in the project repo's
+# default-branch checkout, so branch-owned files (.maister-env-e2e.sh) must
+# NOT be probed here: a branch that adds the config would be wrongly refused.
+# Config presence/shape is validated in-run at the exact tested revision.
 requirements:
   - name: "docker daemon reachable on the web tier"
     probe: "docker info"
@@ -29,9 +32,6 @@ requirements:
   - name: "docker compose v2 available"
     probe: "docker compose version"
     hint: "install the docker compose v2 plugin on the web tier"
-  - name: ".maister-env-e2e.sh config present"
-    probe: "test -f .maister-env-e2e.sh"
-    hint: "create .maister-env-e2e.sh at the repo root (see the env-e2e package README: E2E_COMPOSE_FILES + E2E_RUNNER_SERVICE)"
 nodes:
   - id: implement
     type: ai_coding

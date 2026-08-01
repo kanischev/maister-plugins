@@ -26,14 +26,15 @@ implement (ai_coding) ── success ──> e2e (check) ── pass ──> don
 
 ## Script phase machine (`flows/env-e2e/scripts/run-e2e.sh`)
 
-`init → config → preflight → up → seed → test → capture → result`, teardown
-via trap on EVERY exit path. Verbose `[env-e2e:<phase>]` logging;
-`MAISTER_E2E_DEBUG=1` adds `set -x`.
+`init → preflight → config → up → seed → test → capture → result`, teardown
+via trap on EVERY exit path (preflight before config since 2026-08-01: a
+docker-less host fails env-class, not as a compose-config error). Verbose
+`[env-e2e:<phase>]` logging; `MAISTER_E2E_DEBUG=1` adds `set -x`.
 
 | Failure class | Meaning | Exit | Run outcome |
 | --- | --- | --- | --- |
-| `config` | Bad invocation/config: missing `.maister-env-e2e.sh`, unset `E2E_COMPOSE_FILES`/`E2E_RUNNER_SERVICE`, listed compose file absent, runner service not in `--profile e2e config --services` | ≠ 0, before any resource exists | run **Failed** (`PRECONDITION`) — rework can't fix config |
-| `env` | Infra: docker daemon unreachable, `up --wait` timeout, seed failure, capture failure | ≠ 0, best-effort evidence + guaranteed teardown | run **Failed** (`PRECONDITION`) |
+| `config` | Bad invocation/config: missing `.maister-env-e2e.sh`, unset `E2E_COMPOSE_FILES`/`E2E_RUNNER_SERVICE`, listed compose file absent, runner service not in `--profile e2e config --services`, or an isolation violation in the rendered model (`published:` port / `container_name:` / `network_mode: host`) | ≠ 0, before any resource exists | run **Failed** (`PRECONDITION`) — rework can't fix config |
+| `env` | Infra: docker daemon unreachable, `up --wait` timeout, seed failure, capture failure, docker-level runner failure (reserved codes 125/126/127 or a trailing `Error response from daemon:` marker — the suite never ran) | ≠ 0, best-effort evidence + guaranteed teardown | run **Failed** (`PRECONDITION`) |
 | `test` | The runner service executed and exited non-zero (test failures AND Playwright internal errors both map to `fail` — safe worst case: an extra rework round reads the error) | 0 | verdict `fail` → rework loop |
 
 ## Result contract
@@ -70,12 +71,18 @@ injection channel is always the JSON field.
   `run --rm` one-off) → `down --volumes --remove-orphans --timeout 10`.
   Group-TERM tolerant (the trap spawns fresh processes); the engine's 30 s
   SIGKILL grace bounds it.
+- Zero published ports / no `container_name:` / no host networking is
+  **enforced** on the rendered `compose config` model (config-class refusal).
 - Residual orphans exist only on SIGKILL-class deaths (grace exceeded,
-  > 4 MiB combined step output, hard web-process crash):
+  > 4 MiB combined step output, hard web-process crash). The listing
+  commands below are discovery only — **active runs share the prefix**;
+  verify the run is terminal on the MAIster board before downing that
+  specific id, and never run a prefix-wide down:
 
 ```bash
 docker compose ls | grep maister-run-
 docker ps --filter "name=maister-run-"
+# only for an id whose run is confirmed terminal:
 docker compose -p maister-run-<id> down --volumes --remove-orphans
 ```
 
@@ -83,7 +90,10 @@ docker compose -p maister-run-<id> down --volumes --remove-orphans
 
 Probed on the **web tier** in the project repo BEFORE any worktree/session/
 token spend; each failure is actionable (`PRECONDITION` with hints):
-`docker info` · `docker compose version` · `test -f .maister-env-e2e.sh`.
+`docker info` · `docker compose version`. Host invariants only — the config
+file is NOT probed (probes see the default-branch checkout; a branch adding
+`.maister-env-e2e.sh` would be wrongly refused) and is validated in-run at
+the tested revision instead.
 
 Host expectations: Docker daemon + compose v2 on the web tier (cli/check
 nodes execute there); engine ≥ 3.3.0 (`MAISTER_FLOW_DIR`, ADR-154 — the `:?`
@@ -129,7 +139,7 @@ concurrency proof (distinct `maister-run-*` projects).
 
 ## Testing the package itself
 
-`packages/env-e2e/tests/test-run-e2e.sh` — self-contained 10-case bash
+`packages/env-e2e/tests/test-run-e2e.sh` — self-contained 12-case bash
 harness (docker required): config errors, up-wait timeout, pass/fail
 contracts (incl. tar contents), group-SIGTERM teardown, bad-service
 pre-validation, secret-sanitization via container env dump, failing-summary

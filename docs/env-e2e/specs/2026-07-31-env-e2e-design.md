@@ -32,19 +32,19 @@ k8s or non-compose providers, external CI ingestion (`external_check`).
 
 | ID | Requirement |
 | --- | --- |
-| FR-1 | ONE `check` node (`e2e`) owns the env lifecycle **atomically**: config → preflight → up → seed → test → capture → down, in a single script invocation; teardown is guaranteed by a shell trap on EVERY exit path (success, failure, error, TERM/INT, incl. group-TERM). |
-| FR-2 | **Zero published ports**: neither the fixture nor the contract permits `ports:` on any service; the runner reaches services by compose-network internal DNS only. |
+| FR-1 | ONE `check` node (`e2e`) owns the env lifecycle **atomically**: preflight → config → up → seed → test → capture → down, in a single script invocation; teardown is guaranteed by a shell trap on EVERY exit path (success, failure, error, TERM/INT, incl. group-TERM). *(2026-08-01: preflight moved before config so a docker-less host fails env-class, not as a compose-config error.)* |
+| FR-2 | **Zero published ports — enforced**: the config phase renders the resolved compose model (`compose config`) and refuses (`config` class) any `published:` port, `container_name:` pin, or `network_mode: host`; the runner reaches services by compose-network internal DNS only. *(2026-08-01 amendment: was fixture-only convention; conventions don't protect the FR-3/AC-3 collision-freedom invariant.)* |
 | FR-3 | **Per-run isolation** by compose project name `maister-run-<runId>` (`-p` on every compose invocation); concurrent runs are collision-free by construction. |
 | FR-4 | **Evidence captured on BOTH verdicts**: `e2e-report.tar.gz` (Playwright `playwright-report/` + `test-results/` + full runner output log) and `e2e-compose-logs.txt` (`docker compose logs --no-color`), both written into the run dir (`dirname "$MAISTER_OUTPUT_FILE"`), both on every exit-0 attempt (per-attempt currency). |
-| FR-5 | **Exit-0 protocol**: the script exits 0 whenever the runner service executed (tests ran) — the verdict travels in the result JSON and routes via `decide`; non-zero exit is reserved for `config`/`env` failure classes (run fails hard — rework cannot fix an env). **[grounding]** check nodes have NO failure transition: non-zero exit ⇒ node Failed `PRECONDITION` ⇒ run Failed (`web/lib/flows/runner-cli.ts`, `runner-graph.ts`); `retry_policy` on `check` is silently stripped (`config.schema.ts`). |
+| FR-5 | **Exit-0 protocol**: the script exits 0 whenever the runner service executed (tests ran) — the verdict travels in the result JSON and routes via `decide`; non-zero exit is reserved for `config`/`env` failure classes (run fails hard — rework cannot fix an env). Docker-level runner failures — reserved CLI codes **125/126/127**, or non-zero exit whose output TAIL carries the `Error response from daemon:` marker (docker compose flattens CLI-level errors to exit 1 — verified empirically) — mean the suite did NOT run: classified `env`, never a verdict *(2026-08-01 amendment; residuals: a project wrapper itself exiting 126/127, or a failing suite whose last output line is a daemon error, read as env — §8)*. **[grounding]** check nodes have NO failure transition: non-zero exit ⇒ node Failed `PRECONDITION` ⇒ run Failed (`web/lib/flows/runner-cli.ts`, `runner-graph.ts`); `retry_policy` on `check` is silently stripped (`config.schema.ts`). |
 | FR-6 | **Rework feedback**: the failing summary is a string field named exactly `e2e_comments` in the result JSON. **[grounding]** rework comment injection reads `result.vars[commentsVar]`; cli/check vars are folded from the `MAISTER_OUTPUT_FILE` JSON — stdout is NOT injected automatically (`runner-graph.ts` commentsVar seam, `node-output.ts` fold). |
 | FR-7 | **Config contract** `.maister-env-e2e.sh` (§5) with validation: every violation produces an actionable `[env-e2e:config] …` line and exit 1 BEFORE any compose resource exists. |
-| FR-8 | **Preflight requirements** (ADR-091): `docker info`, `docker compose version`, `test -f .maister-env-e2e.sh` — launch is refused (`PRECONDITION`, with hints) before any worktree/session/token spend. |
+| FR-8 | **Preflight requirements** (ADR-091) probe HOST invariants only: `docker info`, `docker compose version` — launch refused (`PRECONDITION`, with hints) before any worktree/session/token spend. The config file is deliberately NOT probed: probes run against the project repo's default-branch checkout, so a branch that ADDS `.maister-env-e2e.sh` would be wrongly refused at launch; config presence/shape is validated in-run at the exact tested revision instead (config class). *(2026-08-01 amendment.)* |
 | FR-9 | **Teardown guaranteed** on all script exit paths: trap on EXIT/TERM/INT armed BEFORE the first compose call runs best-effort capture then `docker compose -p <proj> down --volumes --remove-orphans --timeout 10`. Group-TERM tolerance: the trap spawns FRESH `docker compose` processes (they are not in the signal batch of a process-group TERM). Residual risk: SIGKILL (30 s engine grace exceeded, 4 MiB output cap, hard web-process crash) strands the env → documented sweep (FR-13). |
 | FR-10 | **Sanitized child env**: every docker invocation runs under `env -i PATH="$PATH" HOME="$HOME" COMPOSE_PROJECT_NAME="<proj>" <E2E_ENV pairs>` — defense-in-depth over platform ADR-153; web-tier values beyond that set MUST NOT reach compose interpolation or containers. |
 | FR-11 | **Packaged-script materialization**: `flows/env-e2e/scripts/run-e2e.sh` is the SSOT file (shipped INSIDE the flow dir — `MAISTER_FLOW_DIR` is the installed FLOW revision dir, which materializes the flow subdir plus package-root `schemas/`, NOT other package-root dirs; verified against the platform installer, `web/lib/flows.ts` copy + `materializePackageRootSchemas`). Executed via `bash "${MAISTER_FLOW_DIR:?env-e2e requires MAIster engine >= 3.3.0 (MAISTER_FLOW_DIR missing)}/scripts/run-e2e.sh" "maister-run-{{ run.id }}"`; `compat.engine_min: 3.3.0`. The install dir is read-only: the script writes ONLY to the worktree cwd and the run dir. |
 | FR-12 | **Timeout budget**: the `e2e` node declares `settings.timeoutMs: 900000` (≤ the 1 h `MAISTER_MAX_CLI_TIMEOUT_MS` host ceiling); the fixture completes in < 300 s so the package also works on deployments predating the timeoutMs fix (default 300 s). |
-| FR-13 | **Orphan sweep documented** (crash-only cases): `docker compose ls --filter name=maister-run-` / `docker ps --filter "name=maister-run-"`; stray teardown `docker compose -p maister-run-<id> down --volumes --remove-orphans`. |
+| FR-13 | **Orphan sweep documented** (crash-only cases): `docker compose ls` / `docker ps --filter "name=maister-run-"` are DISCOVERY commands only — active runs share the same prefix, so the operator MUST verify the run is terminal in MAIster (board/run status) before tearing down that SPECIFIC id via `docker compose -p maister-run-<id> down --volumes --remove-orphans`. Prefix-wide destructive downs are forbidden. *(2026-08-01 wording hardened.)* |
 | FR-14 | **Fixture + bootstrap**: `examples/fixture/` (web nginx + db postgres + playwright runner under profile `e2e`, green + toggleable red spec) and `examples/bootstrap-fixture.sh [--red] <target>`; green + red instances double as the concurrency pair. |
 
 Non-functional:
@@ -205,19 +205,21 @@ unset.
 | # | Phase | Does | Failure class on error |
 | --- | --- | --- | --- |
 | 1 | `init` | Parse `$1` (project name), resolve `RUN_DIR`, **arm the trap** (EXIT/TERM/INT) BEFORE any compose call. | `config` |
-| 2 | `config` | Source + validate `.maister-env-e2e.sh` (§5), incl. runner-service presence via `compose config --services` (daemon-less). | `config` |
-| 3 | `preflight` | `docker info`, `docker compose version` (sanitized env). | `env` |
+| 2 | `preflight` | `docker info`, `docker compose version` (sanitized env). Before config *(2026-08-01)*: a docker-less host must fail env-class, not as a compose-config error. | `env` |
+| 3 | `config` | Source + validate `.maister-env-e2e.sh` (§5), incl. runner-service presence via `compose config --services` (daemon-less) AND isolation enforcement (FR-2): the rendered `compose config` model must contain no `published:` / `container_name:` / `network_mode: host` lines — violations are refused with the matched lines. | `config` |
 | 4 | `up` | `docker compose -p <proj> -f … up -d --wait --wait-timeout "${E2E_WAIT_TIMEOUT:-120}"`. | `env` |
 | 5 | `seed` | `bash -c "$E2E_SEED_COMMAND"` when set (sanitized env + `E2E_COMPOSE`). | `env` |
-| 6 | `test` | `docker compose -p <proj> -f … --profile e2e run --rm -T [-e E2E_ENV…] "$E2E_RUNNER_SERVICE"` under `set +e` (`-T`: no pseudo-TTY — deterministic non-interactive output); exit code captured; output tee'd to `$WORK_DIR/test-output.log` and stdout. | never fails the script (exit code = verdict) |
+| 6 | `test` | `docker compose -p <proj> -f … --profile e2e run --rm -T [-e E2E_ENV…] "$E2E_RUNNER_SERVICE"` under `set +e` (`-T`: no pseudo-TTY — deterministic non-interactive output); exit code captured; output tee'd to `$WORK_DIR/test-output.log` and stdout. Docker-level failure → `env` class *(2026-08-01)*: reserved codes 125/126/127 OR non-zero exit with a trailing `Error response from daemon:` marker (compose flattens CLI errors to 1). | `env` on docker-level failure; otherwise never fails the script (exit code = verdict) |
 | 7 | `capture` | ALWAYS both files: tar worktree `playwright-report/` + `test-results/` + `test-output.log` → `$RUN_DIR/e2e-report.tar.gz` (missing dirs → `MISSING-REPORT.txt` marker inside the tar, never a skipped artifact); `docker compose … logs --no-color > $RUN_DIR/e2e-compose-logs.txt`. | `env` (capture must succeed on exit-0 paths — the produces backstop needs both files) |
 | 8 | `result` | Build JSON (§4) from the runner exit code + the ANSI-stripped `test-output.log` (reporters emit cursor/color codes even without a TTY — counters and the failing tail are stripped before extraction); write to `$MAISTER_OUTPUT_FILE`; print the failing block last on stdout. | `env` |
 | 9 | `down` | Via the trap: best-effort capture (if not yet done) then `down --volumes --remove-orphans --timeout 10`; then exit 0 (verdict paths) / original non-zero (config/env). | — |
 
-**Failure classes:** `config` — wrong invocation/config, nothing was created,
-rework can't fix it → exit 1. `env` — docker/infra failed (preflight, up
-timeout, seed, capture), evidence best-effort, teardown guaranteed → exit 1.
-`test` — the runner ran and returned non-zero → verdict `fail`, exit 0.
+**Failure classes:** `config` — wrong invocation/config/isolation violation,
+nothing was created, rework can't fix it → exit 1. `env` — docker/infra
+failed (preflight, up timeout, seed, capture, docker-level runner codes
+125/126/127), evidence best-effort, teardown guaranteed → exit 1.
+`test` — the runner ran and returned non-zero (except 125/126/127) →
+verdict `fail`, exit 0.
 
 **Teardown guarantees (FR-9):** trap covers normal exit, `set -e` errors,
 TERM/INT; group-TERM (engine timeout) hits bash + children, and the trap's
@@ -275,6 +277,8 @@ Harness cases (one behavior each; ALL must be RED against the T3 stub):
 | 8 | Bad runner service name | exit≠0 (config class via `config --services` pre-validation), teardown ran / nothing left |
 | 9 | Sanitization: `SECRET_PROBE=xyz` in parent env | env dump inside a container does NOT contain `SECRET_PROBE` (fixture-copy runner command dumps env to the mounted worktree) |
 | 10 | Summary extraction quality | failing block contains the failing spec name + first error line |
+| 11 | Docker-level runner exit (broken entrypoint → 127) *(2026-08-01)* | exit≠0 (env class — "did not execute"), teardown ran |
+| 12 | Isolation refusal (override publishing a host port) *(2026-08-01)* | exit≠0, `[env-e2e:config]` isolation message, nothing created |
 
 Documented (non-harness) edges: engine timeout-abort at system level and
 SIGKILL-after-grace (T11b); 4 MiB stdout cap policy (§6); seed failure = `env`
@@ -291,9 +295,9 @@ zero egress — README states this).
 | AC-1 | Green fixture: launch → env healthy, `docker ps` shows no published ports on `maister-run-*` → verdict `pass` routes to `done`-side → both artifact rows `current` → readiness green (evidence Check 1 satisfied, no blocking-gate obstruction) → `docker compose ls` clean after | T8 |
 | AC-2 | Red fixture: attempt-1 verdict `fail` → rework fires with `e2e_comments` in the implement attempt-2 context → red-attempt artifacts present → teardown after EVERY attempt → converge green OR exhaust→`escalate`→review (never a red path to `done`) | T9 |
 | AC-3 | Green + red running simultaneously: two distinct `maister-run-<id>` compose projects, no name/port collisions, both fully torn down | T10 |
-| AC-4 | Teardown survives interruption: script-level TERM (harness case 7) + system-level SIGTERM mid-test, timeout abort under group-kill, error paths | T-RED (script level), T11a/T11b (system level) |
+| AC-4 | Teardown survives interruption: script-level TERM (harness case 7) + system-level SIGTERM mid-test, timeout abort under group-kill, error paths incl. docker-level runner failures (case 11) | T-RED (script level), T11a/T11b (system level) |
 | AC-5 | Docker-less host: probes fail actionably BEFORE any run work (`PRECONDITION` with hints) | T3 probes + T11c |
-| AC-6 | Config errors: exit≠0 with actionable `[env-e2e:config]` message; platform side = run Failed | T-RED cases 1-3, 8 |
+| AC-6 | Config errors: exit≠0 with actionable `[env-e2e:config]` message; platform side = run Failed | T-RED cases 1-3, 8, 12 |
 | AC-7 | Packaged script executes via `MAISTER_FLOW_DIR` on engine ≥ 3.3.0; the `:?` guard message names the floor on older engines | T0 tests + T8 |
 | AC-8 | Web-tier secret sentinel is NOT visible inside containers | T-RED case 9 |
 | AC-9 | Result contract: schema-valid JSON, verdict semantics per §4, populated `summary`/`e2e_comments`, both artifacts on every exit-0 path | T-RED 5/6/10 + T4 (schema materialization) |

@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # env-e2e lifecycle script (SSOT — spec §6). Owns the ephemeral compose env
-# ATOMICALLY: config → preflight → up → seed → test → capture → result, with
+# ATOMICALLY: preflight → config → up → seed → test → capture → result, with
 # teardown guaranteed by the trap on EVERY exit path (success, failure, error,
 # group-TERM/INT). Exit-0 protocol (FR-5): exit 0 whenever the runner service
 # executed — the verdict travels in the result JSON; non-zero exit is reserved
-# for the config|env failure classes. Bash 3.2-compatible (macOS web tier).
+# for the config|env failure classes (docker CLI codes 125/126/127 from the
+# runner invocation are env class: the suite did not execute).
+# Bash 3.2-compatible (macOS web tier).
 #
 # Usage (engine): bash "$MAISTER_FLOW_DIR/scripts/run-e2e.sh" "maister-run-<runId>"
 # Env (engine):   MAISTER_OUTPUT_FILE (armed by output.result), MAISTER_FLOW_DIR
@@ -171,7 +173,17 @@ trap on_exit EXIT
 trap 'exit 143' TERM
 trap 'exit 130' INT
 
-# === phase 2: config (spec §5) =============================================
+# === phase 2: preflight ====================================================
+# Before config: a docker-less host must surface as an env-class preflight
+# failure, not as a confusing compose-config error from the config phase.
+
+phase preflight "docker daemon + compose v2"
+dockerc info >/dev/null 2>&1 \
+  || die_env preflight "docker daemon unreachable from the web tier (cli/check nodes run there) — start Docker or fix the docker context"
+dockerc compose version >/dev/null 2>&1 \
+  || die_env preflight "docker compose v2 unavailable on the web tier"
+
+# === phase 3: config (spec §5) =============================================
 
 phase config "loading .maister-env-e2e.sh from $(pwd)"
 if [[ ! -f .maister-env-e2e.sh ]]; then
@@ -205,6 +217,15 @@ if ! printf '%s\n' "$SERVICES" | grep -qx "$E2E_RUNNER_SERVICE"; then
   die_config "E2E_RUNNER_SERVICE \"$E2E_RUNNER_SERVICE\" is not a service of the composed files (available: $(printf '%s' "$SERVICES" | tr '\n' ' '))"
 fi
 
+# Isolation enforcement (FR-2/FR-3): zero published ports, no pinned container
+# names, no host networking — collision-freedom is an invariant of the resolved
+# model, not a trusted-author convention. Matched lines are reported verbatim.
+RESOLVED_CONFIG="$(dockerc compose "${COMPOSE_ARGS[@]}" --profile e2e config 2>/dev/null || true)"
+ISOLATION_VIOLATIONS="$(printf '%s\n' "$RESOLVED_CONFIG" | grep -nE '^[[:space:]]+(published:|container_name:|network_mode:[[:space:]]*host)' || true)"
+if [[ -n "$ISOLATION_VIOLATIONS" ]]; then
+  die_config "resolved compose model violates env-e2e isolation (published ports / container_name / host network are not allowed): $(printf '%s' "$ISOLATION_VIOLATIONS" | tr '\n' '; ')"
+fi
+
 RUN_ENV_FLAGS=()
 if [[ -n "${E2E_ENV[*]+set}" ]]; then
   for pair in "${E2E_ENV[@]}"; do
@@ -213,14 +234,6 @@ if [[ -n "${E2E_ENV[*]+set}" ]]; then
 fi
 
 phase config "files=(${E2E_COMPOSE_FILES[*]}) runner=$E2E_RUNNER_SERVICE wait_timeout=${E2E_WAIT_TIMEOUT}s"
-
-# === phase 3: preflight ====================================================
-
-phase preflight "docker daemon + compose v2"
-dockerc info >/dev/null 2>&1 \
-  || die_env preflight "docker daemon unreachable from the web tier (cli/check nodes run there) — start Docker or fix the docker context"
-dockerc compose version >/dev/null 2>&1 \
-  || die_env preflight "docker compose v2 unavailable on the web tier"
 
 # === phase 4: up ===========================================================
 
@@ -248,6 +261,21 @@ dockerc compose "${COMPOSE_ARGS[@]}" --profile e2e run --rm -T \
 TEST_EXIT="${PIPESTATUS[0]}"
 set -e
 phase test "runner exited with code $TEST_EXIT"
+
+# Docker-level failure classifier (FR-5): 125/126/127 are the docker CLI's
+# reserved could-not-run codes, and docker COMPOSE flattens CLI-level errors
+# to exit 1 while ending its output with an `Error response from daemon:`
+# line — in both shapes the suite did NOT run, so this is env class, never a
+# verdict. Residuals (documented, spec §8): a project wrapper itself exiting
+# 126/127, or a failing suite whose LAST output line is a daemon error.
+case "$TEST_EXIT" in
+  125 | 126 | 127)
+    die_env test "runner service did not execute (docker exit $TEST_EXIT — daemon/image/entrypoint failure); compose logs are in the evidence"
+    ;;
+esac
+if [[ "$TEST_EXIT" -ne 0 ]] && tail -3 "$TEST_LOG" | grep -q 'Error response from daemon'; then
+  die_env test "runner service did not execute (docker daemon error with exit $TEST_EXIT); compose logs are in the evidence"
+fi
 
 # === phase 7: capture (ALWAYS both files before the verdict) ===============
 

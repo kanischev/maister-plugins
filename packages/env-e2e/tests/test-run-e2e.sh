@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# env-e2e script test harness (spec §8): 10 one-behavior cases against
+# env-e2e script test harness (spec §8): 12 one-behavior cases against
 # flows/env-e2e/scripts/run-e2e.sh. Self-contained bash; requires docker +
 # docker compose v2. Each case gets a fresh fixture copy (project dir) and a
 # fresh temp run dir; MAISTER_FLOW_DIR points at the package's flow dir —
@@ -241,6 +241,47 @@ case10_summary_extraction() {
   expect "failing block carries an error line" grep -qiE 'error|expect' "$OUT_FILE"
 }
 
+case11_docker_level_exit() {
+  new_case c11
+  copy_fixture
+  # Broken entrypoint → the container cannot start → docker exit 127. The
+  # suite never ran, so this must be env class (exit != 0), not a verdict.
+  cat > "$PROJ_DIR/compose.entrypoint.yml" <<'EOF'
+services:
+  e2e:
+    entrypoint: ["/nonexistent-env-e2e-binary"]
+EOF
+  cat > "$PROJ_DIR/.maister-env-e2e.sh" <<'EOF'
+E2E_COMPOSE_FILES=(compose.e2e.yml compose.entrypoint.yml)
+E2E_RUNNER_SERVICE="e2e"
+EOF
+  run_script
+  expect "exit != 0 (got $SCRIPT_EXIT)" test "$SCRIPT_EXIT" -ne 0
+  expect "classifier marks runner as not executed" grep -q 'did not execute' "$LOG_FILE"
+  expect "teardown ran — no containers left" containers_gone
+}
+
+case12_isolation_refusal() {
+  new_case c12
+  copy_fixture
+  # A project override publishing a host port must be refused as config class
+  # BEFORE any resource exists (FR-2/FR-3 are enforced, not conventions).
+  cat > "$PROJ_DIR/compose.ports.yml" <<'EOF'
+services:
+  web:
+    ports:
+      - "127.0.0.1:12799:80"
+EOF
+  cat > "$PROJ_DIR/.maister-env-e2e.sh" <<'EOF'
+E2E_COMPOSE_FILES=(compose.e2e.yml compose.ports.yml)
+E2E_RUNNER_SERVICE="e2e"
+EOF
+  run_script
+  expect "exit != 0 (got $SCRIPT_EXIT)" test "$SCRIPT_EXIT" -ne 0
+  expect "config-class isolation refusal" grep -q '\[env-e2e:config\].*isolation' "$LOG_FILE"
+  expect "nothing was created" containers_gone
+}
+
 # --- driver ----------------------------------------------------------------
 
 run_case() { # $1=id  $2=fn
@@ -263,16 +304,18 @@ log "work root (evidence kept): $WORK_ROOT"
 command -v docker >/dev/null || { log "FATAL: docker required"; exit 2; }
 docker compose version >/dev/null 2>&1 || { log "FATAL: docker compose v2 required"; exit 2; }
 
-run_case "case 1/10 config-missing" case1_config_missing
-run_case "case 2/10 var-missing" case2_var_missing
-run_case "case 3/10 compose-file-absent" case3_compose_file_absent
-run_case "case 4/10 up-wait-timeout" case4_up_wait_timeout
-run_case "case 5/10 pass-path" case5_pass_path
-run_case "case 6/10 fail-path" case6_fail_path
-run_case "case 7/10 sigterm-mid-test" case7_sigterm_mid_test
-run_case "case 8/10 bad-runner-service" case8_bad_runner_service
-run_case "case 9/10 sanitization" case9_sanitization
-run_case "case 10/10 summary-extraction" case10_summary_extraction
+run_case "case 1/12 config-missing" case1_config_missing
+run_case "case 2/12 var-missing" case2_var_missing
+run_case "case 3/12 compose-file-absent" case3_compose_file_absent
+run_case "case 4/12 up-wait-timeout" case4_up_wait_timeout
+run_case "case 5/12 pass-path" case5_pass_path
+run_case "case 6/12 fail-path" case6_fail_path
+run_case "case 7/12 sigterm-mid-test" case7_sigterm_mid_test
+run_case "case 8/12 bad-runner-service" case8_bad_runner_service
+run_case "case 9/12 sanitization" case9_sanitization
+run_case "case 10/12 summary-extraction" case10_summary_extraction
+run_case "case 11/12 docker-level-exit" case11_docker_level_exit
+run_case "case 12/12 isolation-refusal" case12_isolation_refusal
 
 log ""
 log "RESULT: PASS=$PASS FAIL=$FAIL${FAILED_CASES:+ — failed:$FAILED_CASES}"

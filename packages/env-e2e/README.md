@@ -16,15 +16,21 @@ This README summarizes and links the spec — it never forks it.
   service executed (tests ran) — the verdict travels in the result JSON
   (`verdict: pass|fail`) and routes the graph via `decide`. Non-zero exit is
   reserved for `config`/`env` failure classes and fails the run (check nodes
-  have no failure transition — rework cannot fix a broken env).
+  have no failure transition — rework cannot fix a broken env). Docker-level
+  runner failures (reserved codes 125/126/127, or a trailing
+  `Error response from daemon:` marker — compose flattens CLI errors to
+  exit 1) are classified `env`, never a verdict.
 - **Engine floor.** `compat.engine_min: 3.3.0` — the packaged script is
   executed from the installed revision via `MAISTER_FLOW_DIR` (platform
   ADR-154). On an older engine the command's
   `${MAISTER_FLOW_DIR:?…}` guard fails with an actionable one-liner.
 - **Web-tier Docker.** `cli`/`check` nodes execute on the MAIster **web
   tier**: the Docker daemon + compose v2 must live there. Launch preflight
-  (`requirements`) probes `docker info`, `docker compose version`, and the
-  config file before any worktree/session/token spend.
+  (`requirements`) probes `docker info` and `docker compose version` before
+  any worktree/session/token spend — host invariants only: the config file
+  is deliberately NOT probed (probes run against the default-branch
+  checkout; a branch adding it would be wrongly refused) and is validated
+  in-run at the tested revision instead.
 - **Timeout budget.** The e2e node declares `settings.timeoutMs: 900000`
   (15 min), clamped by the host ceiling `MAISTER_MAX_CLI_TIMEOUT_MS`
   (default 1 h). On timeout the engine SIGTERMs the whole process group; the
@@ -39,8 +45,11 @@ This README summarizes and links the spec — it never forks it.
   (`rework.commentsVar`), bounded by `maxLoops: 3`, then `onExhaustion`
   escalation to the `review` human node (`resetTargets: [e2e]` grants a
   fresh budget per human-approved round).
-- **Isolation.** Every compose invocation uses `-p maister-run-<runId>`;
-  zero published ports; the runner reaches services by compose-network DNS.
+- **Isolation — enforced.** Every compose invocation uses
+  `-p maister-run-<runId>`; the config phase renders the resolved compose
+  model and refuses (config class) published ports, `container_name:` pins,
+  and `network_mode: host` — the runner reaches services by compose-network
+  DNS only.
 - **Sanitized env.** Every docker invocation runs under
   `env -i PATH HOME COMPOSE_PROJECT_NAME + E2E_ENV` — defense-in-depth over
   the platform's ADR-153 allow-list. `DOCKER_HOST` is deliberately not
@@ -62,11 +71,15 @@ compose resource exists.
 ## Orphan sweep (crash-only cases)
 
 Teardown is trap-guaranteed; only a SIGKILL-class death (grace exceeded,
-> 4 MiB combined step output, hard web-process crash) can strand an env:
+> 4 MiB combined step output, hard web-process crash) can strand an env.
+**Active runs use the same `maister-run-` prefix** — the listing commands are
+discovery only; before tearing an id down, verify that run is terminal
+(Crashed/Failed/Done) on the MAIster board. Never run a prefix-wide down.
 
 ```bash
-docker compose ls | grep maister-run-        # find stranded projects
-docker ps --filter "name=maister-run-"       # find stranded containers
+docker compose ls | grep maister-run-        # discovery: stranded projects
+docker ps --filter "name=maister-run-"       # discovery: stranded containers
+# for a SPECIFIC id whose run is confirmed terminal in MAIster:
 docker compose -p maister-run-<id> down --volumes --remove-orphans
 ```
 
@@ -74,9 +87,10 @@ docker compose -p maister-run-<id> down --volumes --remove-orphans
 
 - **Web-tier Docker socket**: `cli`/`check` nodes execute on the MAIster web
   tier — the Docker daemon + compose v2 must live on that host. The flow's
-  `requirements` probes (`docker info`, `docker compose version`,
-  `test -f .maister-env-e2e.sh`) refuse launch actionably before any
-  worktree/session/token spend.
+  `requirements` probes (`docker info`, `docker compose version`) refuse
+  launch actionably before any worktree/session/token spend; the config file
+  is validated in-run at the tested revision (not probed — probes see only
+  the default branch).
 - **Engine ≥ 3.3.0** (`MAISTER_FLOW_DIR`, platform ADR-154). Older engines
   fail at the command's `${MAISTER_FLOW_DIR:?…}` guard with a one-line
   remediation.
@@ -110,4 +124,4 @@ concurrency proof (distinct `maister-run-*` compose projects).
 - [Design spec (SSOT)](../../docs/env-e2e/specs/2026-07-31-env-e2e-design.md)
 - [Deep reference](../../docs/env-e2e/README.md) — node walkthrough, result
   contract, failure-class table, script phase machine
-- `tests/test-run-e2e.sh` — the 10-case script harness (docker required)
+- `tests/test-run-e2e.sh` — the 12-case script harness (docker required)
