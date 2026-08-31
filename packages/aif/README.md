@@ -8,6 +8,17 @@ MAIster flows backed by a shared skills + subagents bundle.
 This package is self-contained; nothing here imports from MAIster core.
 Versioned by per-package git tags: `aif/vX.Y.Z` (see the repo root README).
 
+## What changed in `aif/v2.6.0`
+
+Wraps the four flows the original package design deferred (§10 of the
+2026-06-08 design): `aif-dev-light` (aif-dev without the `/aif-improve` pass —
+`plan` emits the typed Plan-review pair itself, floor `3.1.0`),
+`aif-autonomous` (front-loaded intake, no human nodes on the happy path,
+loop-exhaustion escalation hatch, floor `2.1.0`), `aif-loop` (the `/aif-loop`
+Reflex Loop as a flow: intake budget/criteria → loop → human review, floor
+`2.0.0`), and `aif-qa` (`/aif-qa --all` pipeline → human review, floor
+`2.0.0`). Adds `schemas/loop-intake.json`.
+
 ## What changed in `aif/v2.5.0`
 
 Adds typed Plan-review artifacts and declarative review decisions. `aif-dev`
@@ -35,15 +46,19 @@ the flow revision at install time.
 
 ## Flows
 
-Five flows ship with this package, each routed by what the incoming task is.
+Nine flows ship with this package, each routed by what the incoming task is.
 
-| flow id       | route_when                                                                                    |
-| ------------- | --------------------------------------------------------------------------------------------- |
-| `aif-dev`     | A feature / enhancement / refactor with a clear spec (plan → review → implement → review → fix). |
-| `aif-bugfix`  | A reported bug / error / regression to fix (`/aif-fix` loop; emits a self-improvement patch).  |
-| `aif-evolve`  | Periodic maintenance: distill accumulated fix-patches into better skills (not feature work).   |
-| `aif-roadmap` | A large / multi-milestone initiative needing a roadmap before planning.                         |
-| `aif-init`    | One-time: project not yet AIF-initialized (`/aif` + `/aif-architecture`).                       |
+| flow id          | route_when                                                                                     |
+| ---------------- | ---------------------------------------------------------------------------------------------- |
+| `aif-dev`        | A feature / enhancement / refactor with a clear spec (plan → review → implement → review → fix). |
+| `aif-dev-light`  | A small/clear feature where one planning pass suffices — `aif-dev` minus `/aif-improve`.        |
+| `aif-autonomous` | A well-specified task to deliver end-to-end without mid-flow reviews; questions front-loaded.   |
+| `aif-bugfix`     | A reported bug / error / regression to fix (`/aif-fix` loop; emits a self-improvement patch).   |
+| `aif-evolve`     | Periodic maintenance: distill accumulated fix-patches into better skills (not feature work).    |
+| `aif-roadmap`    | A large / multi-milestone initiative needing a roadmap before planning.                         |
+| `aif-init`       | One-time: project not yet AIF-initialized (`/aif` + `/aif-architecture`).                       |
+| `aif-loop`       | A single non-code artifact iterated against quality criteria (`/aif-loop` Reflex Loop).         |
+| `aif-qa`         | An implemented branch needing change summary + test plan + test cases (`/aif-qa --all`).        |
 
 Flow sources live under `flows/<id>/flow.yaml`.
 
@@ -52,8 +67,8 @@ Flow sources live under `flows/<id>/flow.yaml`.
 | Path                          | Purpose                                                                 |
 | ----------------------------- | ----------------------------------------------------------------------- |
 | `capability/`                 | Shared bundle — vendored AIF skills (`skills/`) + subagents (`agents/`). |
-| `schemas/`                    | Shared form schemas: `intake.json` and `review-outcome.json`.             |
-| `flows/<id>/flow.yaml`        | The 5 flow sources listed above.                                        |
+| `schemas/`                    | Shared form schemas: `intake.json`, `review-outcome.json`, `loop-intake.json`. |
+| `flows/<id>/flow.yaml`        | The 9 flow sources listed above.                                        |
 | `config/ai-factory.config.yaml` | Default `.ai-factory/config.yaml` template for a consuming project.    |
 | `setup.sh`                    | Inert no-op (see below).                                                |
 

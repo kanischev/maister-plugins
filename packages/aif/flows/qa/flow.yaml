@@ -1,0 +1,82 @@
+schemaVersion: 1
+name: aif-qa
+metadata:
+  title: "AIF — QA"
+  summary: "QA pipeline over an implemented change: /aif-qa --all (change summary → test plan → test cases) → human review with a bounded rework loop."
+  labels: [qa, testing, test-plan]
+  route_when: "An implemented feature/branch that needs a change summary, a structured test plan, and concrete test scenarios — not new implementation work."
+  links:
+    - { kind: framework, title: "AI Factory 2.x", url: "https://github.com/lee-to/ai-factory/tree/2.x" }
+    - { kind: docs, title: "Dev Workflow", url: "https://github.com/lee-to/ai-factory/blob/2.x/docs/workflow.md" }
+  sources:
+    - { component: "skills/aif-*, agents/*", origin: "github.com/lee-to/ai-factory@2.x" }
+runner_profiles:
+  claude-code:
+    capability_agent: claude
+    adapter: claude
+    model: claude-opus-4-8
+    provider:
+      kind: anthropic
+# Typed artifacts → engine_min >= 1.2.0; M30 retry/session policies → >= 1.4.0.
+# Pinned to the M42 2.0.0 engine baseline for this package release (single
+# reused default session; no sessions: map needed).
+compat:
+  engine_min: 2.0.0
+# M30 (ADR-081): pin the engine default explicitly — one ACP session reused
+# across nodes.
+defaults:
+  session_policy: resume
+nodes:
+  - id: qa
+    type: ai_coding
+    # M30 (ADR-080): auto-retry infra failures only; the workspace rewinds to
+    # the pre-attempt checkpoint.
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      # `qa` is both the entry node and the review rework target. On entry
+      # review_comments is empty (runner-seeded); on a rework jump it carries
+      # the reviewer's feedback so the next QA pass addresses exactly what was
+      # rejected.
+      prompt: |
+        @skill:aif-qa --all
+
+        Task under test:
+        {{ task.prompt }}
+
+        Non-interactive run — do NOT ask the user clarifying questions; run the
+        full pipeline (change summary → test plan → test cases) autonomously
+        and write the QA artifacts to the configured QA path.
+
+        {{ review_comments }}
+    output:
+      produces:
+        - id: qa-pack
+          kind: generic_file
+          requiredFor: [review]
+    transitions:
+      success: review
+
+  - id: review
+    type: human
+    pre_finish:
+      gates:
+        - id: qa-pack-required
+          kind: artifact_required
+          mode: blocking
+          inputArtifacts: [qa-pack]
+    finish:
+      human:
+        role: maintainer
+        decisions: [approve, rework]
+        commentsVar: review_comments
+    transitions:
+      approve: done
+      rework: qa
+    rework:
+      allowedTargets: [qa]
+      workspacePolicies: [keep]
+      maxLoops: 3
+      commentsVar: review_comments

@@ -6,7 +6,7 @@ schemaVersion: 1
 name: aif
 metadata:
   title: "AI Factory"
-  summary: "Spec-driven delivery flows (dev, bugfix, evolve, roadmap, init) + vendored AIF skills/agents bundle."
+  summary: "Spec-driven delivery flows (dev, dev-light, autonomous, bugfix, evolve, roadmap, init, loop, qa) + vendored AIF skills/agents bundle."
   links:
     - { kind: framework, title: "AI Factory 2.x", url: "https://github.com/lee-to/ai-factory/tree/2.x" }
     - { kind: docs, title: "Dev Workflow", url: "https://github.com/lee-to/ai-factory/blob/2.x/docs/workflow.md" }
@@ -14,10 +14,14 @@ metadata:
     - { component: "skills/aif-*, agents/*", origin: "github.com/lee-to/ai-factory@2.x" }
 flows:
   - { id: aif-dev, path: flows/dev }
+  - { id: aif-dev-light, path: flows/dev-light }
+  - { id: aif-autonomous, path: flows/autonomous }
   - { id: aif-bugfix, path: flows/bugfix }
   - { id: aif-evolve, path: flows/evolve }
   - { id: aif-roadmap, path: flows/roadmap }
   - { id: aif-init, path: flows/init }
+  - { id: aif-loop, path: flows/loop }
+  - { id: aif-qa, path: flows/qa }
 capabilities:
   - { id: aif-bundle, path: capability }
 # MCP server templates ship here when a package needs them ({id, transport,

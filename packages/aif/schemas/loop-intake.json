@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "fields": [
+    {
+      "name": "iterations",
+      "label": "Iteration budget",
+      "type": "string",
+      "required": true,
+      "options": ["3", "5", "8"]
+    },
+    {
+      "name": "criteria",
+      "label": "Quality criteria the artifact must satisfy (free form; '-' to let the loop derive them from the task)",
+      "type": "string",
+      "required": true
+    }
+  ]
+}

@@ -1,0 +1,233 @@
+schemaVersion: 1
+name: aif-autonomous
+metadata:
+  title: "AIF — Autonomous"
+  summary: "Front-loaded questions, then fully autonomous delivery: intake → plan → implement → bounded checks→code_review→fix loop → commit. No human nodes on the happy path; loop exhaustion escalates to a human. Platform-level run Review still gates promotion."
+  labels: [feature, enhancement, autonomous]
+  route_when: "A well-specified task the operator wants delivered end-to-end without mid-flow reviews — all preferences are collected up front and the run only surfaces on loop exhaustion or at final promotion."
+  links:
+    - { kind: framework, title: "AI Factory 2.x", url: "https://github.com/lee-to/ai-factory/tree/2.x" }
+    - { kind: docs, title: "Dev Workflow", url: "https://github.com/lee-to/ai-factory/blob/2.x/docs/workflow.md" }
+  sources:
+    - { component: "skills/aif-*, agents/*", origin: "github.com/lee-to/ai-factory@2.x" }
+runner_profiles:
+  claude-code:
+    capability_agent: claude
+    adapter: claude
+    model: claude-opus-4-8
+    provider:
+      kind: anthropic
+# Sessions (M42, ADR-114) → engine_min >= 2.0.0; rework loop onExhaustion
+# routing + human-driven counter reset (ADR-118) → >= 2.1.0 (covers judge
+# `decide` routing, M38 → 1.7.0). No typed Plan-review here, so no 3.1.0 floor.
+compat:
+  engine_min: 2.1.0
+# M30 (ADR-081): rework re-entry resumes the prior ACP session by default; the
+# autonomous fix loop overrides with `session_policy: new_session`.
+defaults:
+  session_policy: resume
+# M42 (ADR-114): fresh-context phases — implement / verify / fix / commit —
+# each inheriting the flow's one claude-code runner. Planning stays on the
+# implicit `default` session.
+sessions:
+  implement: { runner: claude-code }
+  verify: { runner: claude-code }
+  fix: { runner: claude-code }
+  commit: { runner: claude-code }
+nodes:
+  # ALL questions live here, up front — MAIster-native HITL form
+  # (AskUserQuestion is disabled in the adapter; every downstream node runs
+  # non-interactively against these answers).
+  - id: intake
+    type: form
+    settings:
+      form_schema: ./schemas/intake.json
+    transitions:
+      success: plan
+
+  - id: plan
+    type: ai_coding
+    # M30 (ADR-080): auto-retry infra failures only; the workspace rewinds to
+    # the pre-attempt checkpoint. Same policy on every ai_coding node below.
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        @skill:aif-plan {{ task.prompt }}
+
+        Non-interactive run — apply these preferences and do NOT ask:
+        Testing={{ steps.intake.vars.tests }}, Logging={{ steps.intake.vars.logging }}, Docs={{ steps.intake.vars.docs }}.
+
+        This flow is fully autonomous: there is NO human plan review. Resolve
+        every open decision yourself with the safest reasonable option, record
+        each resolved decision and its rationale in the plan document, and do
+        not leave placeholders that require a human answer.
+    output:
+      produces:
+        - id: plan-document
+          kind: plan
+    transitions:
+      success: implement
+
+  - id: implement
+    type: ai_coding
+    # M42: fresh context — the plan is read from disk, not session memory.
+    session: implement
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        @skill:aif-implement
+
+        Non-interactive run — do NOT ask the user clarifying questions; proceed autonomously (tool-use permission prompts are handled by the platform).
+    output:
+      produces:
+        - id: impl-diff
+          kind: diff
+          requiredFor: [review, merge]
+    transitions:
+      success: checks
+
+  # Stack-agnostic verification (no hardcoded pnpm) — emits the gate result artifact.
+  - id: checks
+    type: ai_coding
+    # M42: fresh verification context (the diff is read from disk).
+    session: verify
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        @skill:aif-verify
+
+        Non-interactive run — do NOT ask the user clarifying questions; proceed autonomously.
+    input:
+      requires:
+        - artifact: impl-diff
+          kind: diff
+    output:
+      produces:
+        - id: aif-gate-result
+          kind: test_report
+    transitions:
+      success: code_review
+
+  - id: code_review
+    type: judge
+    # M42: shares the verify session — reviews the same diff checks just gated.
+    session: verify
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        @skill:aif-review
+
+        Non-interactive run — do NOT ask the user clarifying questions; proceed autonomously.
+
+        End your response with a single `maister:output` block per the aif-review
+        skill's "Native flow routing output" section: recommend "fix" when there is
+        any CRITICAL finding (the loop then fixes and re-verifies), or "commit" when
+        there are none (non-critical suggestions ride along in review_comments and do
+        NOT block). Put the concrete items the next fix must address in review_comments.
+    input:
+      requires:
+        - artifact: impl-diff
+          kind: diff
+    # ADR-103 (M38): route on the judge's own structured output.
+    output:
+      result:
+        schema: ./schemas/review-outcome.json
+        required: true
+    decide:
+      from: output.recommendation
+    transitions:
+      fix: fix
+      commit: commit
+      exhausted: escalation
+    # ADR-118: the autonomous bounded review↔fix loop. A clean verdict commits
+    # directly (no mid-flow human review); exhaustion is the ONLY path that
+    # surfaces a human, with the accumulated worktree preserved.
+    rework:
+      allowedTargets: [fix]
+      workspacePolicies: [keep]
+      maxLoops: 5
+      session_policy: new_session
+      commentsVar: review_comments
+      onExhaustion: exhausted
+
+  # Escalation hatch — reachable only when the autonomous loop cannot converge.
+  - id: escalation
+    type: human
+    pre_finish:
+      gates:
+        - id: impl-diff-required
+          kind: artifact_required
+          mode: blocking
+          inputArtifacts: [impl-diff]
+    finish:
+      human:
+        role: maintainer
+        decisions: [approve, rework]
+        commentsVar: review_comments
+    transitions:
+      # `approve` is a human override: commit despite the judge's remaining
+      # findings (they ride along in review_comments for the record).
+      approve: commit
+      rework: fix
+    rework:
+      allowedTargets: [fix]
+      # M30 (ADR-079): the reviewer picks — keep the tree as rejected, or
+      # rewind to the pre-fix checkpoint for a clean re-attempt.
+      workspacePolicies: [keep, rewind-to-node-checkpoint]
+      maxLoops: 3
+      commentsVar: review_comments
+      # M42: each rework iteration re-enters `fix` on a fresh session.
+      session_policy: new_session
+      # ADR-118: a human rework re-baselines the code_review loop's attempt
+      # counter → a fresh autonomous maxLoops budget.
+      resetTargets: [code_review]
+
+  - id: fix
+    type: ai_coding
+    # M42: fresh rework context, focused on {{ review_comments }}.
+    session: fix
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        @skill:aif-fix {{ review_comments }}
+
+        Non-interactive run — do NOT ask the user clarifying questions; proceed autonomously (tool-use permission prompts are handled by the platform).
+    transitions:
+      success: checks
+
+  - id: commit
+    type: ai_coding
+    # M42: clean commit context — only the working tree matters here.
+    session: commit
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        @skill:aif-commit
+
+        Non-interactive run — do NOT ask the user clarifying questions (e.g. do not prompt to push); commit only.
+    pre_finish:
+      gates:
+        - id: commit-gate
+          kind: command_check
+          mode: blocking
+          command: "test -z \"$(git status --porcelain --untracked-files=no)\" && git log -1 --pretty=%s | grep -Eq '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\\([^)]+\\))?!?: .+'"
+    transitions:
+      success: done
