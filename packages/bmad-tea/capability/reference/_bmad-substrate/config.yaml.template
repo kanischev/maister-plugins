@@ -1,7 +1,5 @@
-# Canonical BMad TEA config the vendored testarch skills read from
-# `{project-root}/_bmad/tea/config.yaml`. Written into the run worktree
-# idempotently by each tea-* flow's `substrate` cli node (project_name from
-# `{{ run.projectSlug }}`). Keys mirror BMAD TEA v1.19.0 src/module.yaml.
+# BMAD TEA 1.24 config created idempotently by
+# bmad-runtime-support/prepare.sh in each tea-* flow.
 project_name: "<project-slug>"
 user_name: "MAIster"
 communication_language: "English"
@@ -9,7 +7,7 @@ document_output_language: "English"
 output_folder: "docs"
 test_artifacts: "docs/test-artifacts"
 tea_use_playwright_utils: true
-tea_use_pactjs_utils: false
+tea_use_pactjs_utils: true
 tea_pact_mcp: "none"
 tea_browser_automation: "auto"
 tea_execution_mode: "auto"

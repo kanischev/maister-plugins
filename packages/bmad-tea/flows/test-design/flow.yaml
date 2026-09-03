@@ -8,7 +8,7 @@ metadata:
   links:
     - { kind: framework, title: "BMAD Test Architect", url: "https://github.com/bmad-code-org/bmad-method-test-architecture-enterprise" }
   sources:
-    - { component: "capability/skills/bmad-testarch-test-design", origin: "github.com/bmad-code-org/bmad-method-test-architecture-enterprise@v1.19.0" }
+    - { component: "capability/skills/bmad-testarch-test-design", origin: "github.com/bmad-code-org/bmad-method-test-architecture-enterprise@v1.24.0" }
 runner_profiles:
   claude-code:
     capability_agent: claude
@@ -19,42 +19,25 @@ runner_profiles:
 # Pinned to the M42 2.0.0 engine baseline for this package release (single
 # reused default session; no sessions: map needed).
 compat:
-  engine_min: 2.0.0
+  engine_min: 3.7.0
 defaults:
   session_policy: resume
+requirements:
+  - name: "uv with Python 3.11+"
+    probe: "command -v uv"
+    hint: "install uv and ensure Python 3.11 or newer is available"
+result:
+  export:
+    schema: ./schemas/public-result.v1.json
+    from: [work]
+    required: true
 verdict_calibration:
   confidence_min: 0.7
 nodes:
   - id: substrate
     type: cli
     action:
-      command: |
-        set -e
-        mkdir -p _bmad/tea docs/test-artifacts
-        if [ ! -f _bmad/tea/config.yaml ]; then
-          printf '%s\n' \
-            'project_name: "{{ run.projectSlug }}"' \
-            'user_name: "MAIster"' \
-            'communication_language: "English"' \
-            'document_output_language: "English"' \
-            'output_folder: "docs"' \
-            'test_artifacts: "docs/test-artifacts"' \
-            'tea_use_playwright_utils: true' \
-            'tea_use_pactjs_utils: false' \
-            'tea_pact_mcp: "none"' \
-            'tea_browser_automation: "auto"' \
-            'tea_execution_mode: "auto"' \
-            'tea_capability_probe: true' \
-            'test_stack_type: "auto"' \
-            'ci_platform: "auto"' \
-            'test_framework: "auto"' \
-            'risk_threshold: "p1"' \
-            'test_design_output: "test-design"' \
-            'test_review_output: "test-reviews"' \
-            'trace_output: "traceability"' \
-            > _bmad/tea/config.yaml
-        fi
-        echo "[tea substrate] _bmad/tea/config.yaml ready"
+      command: '.claude/skills/bmad-runtime-support/prepare.sh "{{ run.projectSlug }}"'
     transitions:
       success: work
 
@@ -76,6 +59,10 @@ nodes:
         - Scope / task: {{ task.prompt }}
         - Drive the `bmad-testarch-test-design` skill autonomously: design a risk-based test strategy and coverage plan (risk assessment + NFR planning) for the target scope. Write the artifact under docs/test-artifacts/. No placeholders.
         - Commit locally (e.g. "docs(tea): test design"). STOP after the artifact — the next node reviews it.
+        - End with exactly one result block:
+          ```json maister:output
+          {"summary":"...","outcome":"completed","payload":{"artifacts":[],"risks":[],"coveragePlan":{},"recommendation":{}}}
+          ```
 
         Reviewer feedback from a prior review (empty on first pass):
         {{ review_comments }}
@@ -89,19 +76,30 @@ nodes:
       produces:
         - id: tea-artifact
           kind: generic_file
+      result:
+        schema: ./schemas/public-result.v1.json
+        required: true
+        on_mismatch: retry
+    rework:
+      allowedTargets: [work]
+      workspacePolicies: [keep, rewind-to-node-checkpoint]
+      maxLoops: 2
+      commentsVar: review_comments
     transitions:
       success: review
+      retry: work
 
   - id: review
     type: human
     finish:
       human:
         role: maintainer
-        decisions: [approve, rework]
+        decisions: [approve, rework, waive]
         commentsVar: review_comments
     transitions:
       approve: done
       rework: work
+      waive: done
     rework:
       allowedTargets: [work]
       workspacePolicies: [keep, rewind-to-node-checkpoint]
