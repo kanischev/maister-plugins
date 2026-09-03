@@ -2,13 +2,13 @@ schemaVersion: 1
 name: os-init
 metadata:
   title: "OpenSpec — Init"
-  summary: "One-time: ensure the openspec CLI, scaffold OpenSpec (openspec init --tools claude) + fill project.md -> review -> commit."
+  summary: "One-time: install the pinned CLI, scaffold OpenSpec without generating duplicate client skills, enrich project context, review, and commit."
   labels: [setup, onboarding, spec-driven]
   route_when: "One-time: project not yet OpenSpec-initialized (no openspec/ base)."
   links:
     - { kind: framework, title: "OpenSpec", url: "https://github.com/Fission-AI/OpenSpec" }
   sources:
-    - { component: "capability/reference/*", origin: "npm:@fission-ai/openspec@1.4.1" }
+    - { component: "capability/skills/* + capability/reference/schema-spec-driven", origin: "github.com/Fission-AI/OpenSpec@v1.12.0" }
 runner_profiles:
   claude-code:
     capability_agent: claude
@@ -31,11 +31,11 @@ requirements:
     hint: "install Node.js (npm) on the supervisor/web host"
 nodes:
   # Deterministic installer — a `cli` node (no agent, no permission HITL).
-  # Idempotent: installs the pinned openspec CLI only if absent.
+  # Enforce the exact CLI version matching the vendored skills and schema.
   - id: ensure
     type: cli
     action:
-      command: "command -v openspec >/dev/null 2>&1 || npm i -g @fission-ai/openspec@1.4.1"
+      command: "npm i -g @fission-ai/openspec@1.12.0 && test \"$(openspec --version)\" = \"1.12.0\""
     transitions:
       success: init
 
@@ -55,8 +55,9 @@ nodes:
         - MAIster owns git + promotion: do NOT create worktrees, switch/create branches, merge, push, or open PRs.
 
         THIS NODE — Initialize OpenSpec in this project (one-time):
-        - Scaffold it: `openspec init --tools claude --force` (writes openspec/config.yaml + .claude/commands/opsx/* + .claude/skills/openspec-*). Then refresh: `openspec update --force`.
+        - Scaffold it with `openspec init --tools none --force`. The package already materializes the matching 12 Agent Skills, so do not generate or overwrite client-specific skills or commands.
         - If a project brief (openspec/project.md or similar) was scaffolded, populate it with REAL project context: explore the repo (stack, build/test commands, conventions, directory structure, domain) and write an accurate brief that future OpenSpec changes will rely on. Extra context: {{ task.prompt }}
+        - Apply reviewer feedback when re-entering this node: {{ review_comments }}
         - Do NOT commit — the commit node finalizes. STOP after scaffolding + filling project.md; the next node is human review.
     transitions:
       success: review
@@ -66,10 +67,16 @@ nodes:
     finish:
       human:
         role: maintainer
-        decisions: [approve]
+        decisions: [approve, rework]
         commentsVar: review_comments
     transitions:
       approve: commit
+      rework: init
+    rework:
+      allowedTargets: [init]
+      workspacePolicies: [keep, rewind-to-node-checkpoint]
+      maxLoops: 3
+      commentsVar: review_comments
 
   # Deterministic commit — a `cli` node. init left the scaffold uncommitted, so
   # this node's committed range is the whole openspec/ scaffold (the must_touch

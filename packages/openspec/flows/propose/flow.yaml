@@ -8,7 +8,7 @@ metadata:
   links:
     - { kind: framework, title: "OpenSpec", url: "https://github.com/Fission-AI/OpenSpec" }
   sources:
-    - { component: "capability/reference/*", origin: "npm:@fission-ai/openspec@1.4.1" }
+    - { component: "capability/skills/openspec-propose", origin: "github.com/Fission-AI/OpenSpec@v1.12.0" }
 runner_profiles:
   claude-code:
     capability_agent: claude
@@ -20,13 +20,18 @@ runner_profiles:
 # Pinned to the M42 2.0.0 engine baseline for this package release (single
 # reused default session; no sessions: map needed).
 compat:
-  engine_min: 2.0.0
+  engine_min: 3.7.0
 defaults:
   session_policy: resume
 requirements:
-  - name: "openspec CLI present"
-    probe: "command -v openspec"
-    hint: "run the os-init flow first, or: npm i -g @fission-ai/openspec@1.4.1"
+  - name: "openspec CLI 1.12.0"
+    probe: "test \"$(openspec --version)\" = \"1.12.0\""
+    hint: "run the os-init flow first, or: npm i -g @fission-ai/openspec@1.12.0"
+result:
+  export:
+    schema: ./schemas/public-result.v1.json
+    from: [propose, deferred]
+    required: true
 nodes:
   - id: propose
     type: ai_coding
@@ -40,7 +45,7 @@ nodes:
       prompt: |
         [MAIster x OpenSpec — execution contract]
         You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree on the correct branch; the project is OpenSpec-initialized (run os-init first if not).
-        - Invoke OpenSpec via the `openspec` CLI directly (not /opsx:* slash commands, not openspec-* skills). AskUserQuestion is disabled — never ask the user; derive the change name yourself; make best-judgment decisions. Use --json / --no-interactive. spec-driven schema; STOP on workspace-planning mode.
+        - Invoke the packaged `openspec-propose` skill as the workflow authority and use the pinned CLI it describes. AskUserQuestion is disabled; derive the change name and record ambiguities as explicit assumptions for the human gate. Use JSON/non-interactive CLI forms.
         - MAIster owns git + promotion: commit locally only; do NOT merge/push/PR or create worktrees/branches.
 
         THIS NODE — Propose an OpenSpec change (proposal only):
@@ -49,6 +54,10 @@ nodes:
         - Build all artifacts to apply-ready: loop `openspec status --change "<name>" --json` to find `ready` artifacts; for each run `openspec instructions <artifact-id> --change "<name>" --json` and write the file to its `resolvedOutputPath` using the returned template (proposal.md, design.md, tasks.md, spec deltas under specs/), honoring context/rules. Continue until every `applyRequires` artifact is `done`. No placeholders.
         - Validate and fix until clean: `openspec validate --changes --strict --no-interactive`.
         - Commit the proposal locally (e.g. "docs(openspec): propose <name>"). The tracked tree MUST end clean. STOP — this is proposal-only; implementation happens later via os-apply.
+        - End with exactly one result block:
+          ```json maister:output
+          {"summary":"...","outcome":"completed","payload":{"changeName":"...","planningHome":"...","artifacts":[],"readyForApply":true}}
+          ```
 
         Reviewer feedback from a prior proposal_review (empty on first pass):
         {{ proposal_review_comments }}
@@ -73,21 +82,55 @@ nodes:
       produces:
         - id: change-proposal
           kind: generic_file
+      result:
+        schema: ./schemas/public-result.v1.json
+        required: true
+        on_mismatch: retry
+    rework:
+      allowedTargets: [propose]
+      workspacePolicies: [keep, rewind-to-node-checkpoint]
+      maxLoops: 2
+      commentsVar: proposal_review_comments
     transitions:
       success: proposal_review
+      retry: propose
 
   - id: proposal_review
     type: human
     finish:
       human:
         role: maintainer
-        decisions: [approve, rework]
+        decisions: [approve, rework, defer]
         commentsVar: proposal_review_comments
     transitions:
       approve: done
       rework: propose
+      defer: deferred
     rework:
       allowedTargets: [propose]
       workspacePolicies: [keep]
       maxLoops: 3
       commentsVar: proposal_review_comments
+
+  - id: deferred
+    type: ai_coding
+    action:
+      prompt: |
+        Do not modify the repository. Summarize why the OpenSpec proposal was
+        deferred and what is needed to resume. End with exactly:
+        ```json maister:output
+        {"summary":"OpenSpec proposal deferred by the human gate.","outcome":"needs_input","payload":{"resumeRequirements":[]}}
+        ```
+    output:
+      result:
+        schema: ./schemas/public-result.v1.json
+        required: true
+        on_mismatch: retry
+    rework:
+      allowedTargets: [deferred]
+      workspacePolicies: [keep]
+      maxLoops: 1
+      commentsVar: proposal_review_comments
+    transitions:
+      success: done
+      retry: deferred

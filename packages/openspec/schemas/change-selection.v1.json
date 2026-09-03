@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "fields": [
+    { "name": "changeName", "type": "string", "required": true },
+    { "name": "summary", "type": "string", "required": true }
+  ]
+}

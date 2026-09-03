@@ -8,7 +8,7 @@ metadata:
   links:
     - { kind: framework, title: "OpenSpec", url: "https://github.com/Fission-AI/OpenSpec" }
   sources:
-    - { component: "capability/reference/*", origin: "npm:@fission-ai/openspec@1.4.1" }
+    - { component: "capability/skills/openspec-{apply-change,verify-change,archive-change}", origin: "github.com/Fission-AI/OpenSpec@v1.12.0" }
 runner_profiles:
   claude-code:
     capability_agent: claude
@@ -19,15 +19,20 @@ runner_profiles:
 # Pinned to the M42 2.0.0 engine baseline for this package release (single
 # reused default session; no sessions: map needed).
 compat:
-  engine_min: 2.0.0
+  engine_min: 3.7.0
 defaults:
   session_policy: resume
+result:
+  export:
+    schema: ./schemas/public-result.v1.json
+    from: [code_review]
+    required: true
 verdict_calibration:
   confidence_min: 0.7
 requirements:
-  - name: "openspec CLI present"
-    probe: "command -v openspec"
-    hint: "run the os-init flow first, or: npm i -g @fission-ai/openspec@1.4.1"
+  - name: "openspec CLI 1.12.0"
+    probe: "test \"$(openspec --version)\" = \"1.12.0\""
+    hint: "run the os-init flow first, or: npm i -g @fission-ai/openspec@1.12.0"
 nodes:
   - id: apply
     type: ai_coding
@@ -43,21 +48,36 @@ nodes:
       prompt: |
         [MAIster x OpenSpec — execution contract]
         You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree on the correct branch; the project is OpenSpec-initialized (run os-init first if not).
-        - Invoke OpenSpec via the `openspec` CLI directly (not /opsx:* slash commands, not openspec-* skills). AskUserQuestion is disabled — never ask the user; auto-select; use --json/--no-interactive. spec-driven schema; STOP on workspace-planning mode.
+        - Invoke the packaged `openspec-apply-change` skill as the workflow authority and use the pinned CLI it describes. AskUserQuestion is disabled: auto-select only when exactly one change exists; otherwise stop with the candidates for the human gate. Use JSON/non-interactive CLI forms.
         - MAIster owns git + promotion: commit locally only; do NOT merge/push/PR or create worktrees/branches.
 
         THIS NODE — Apply an existing OpenSpec change (implement its tasks):
-        - The change to apply: {{ task.prompt }}. Resolve it via `openspec list --json` (match the named change, or auto-select if exactly one active). Announce the chosen change.
+        - The change to apply: {{ task.prompt }}. Drive `openspec-apply-change` headlessly, treating the task prompt as the user's explicit selection and recording minor assumptions.
         - `openspec status --change "<name>" --json`, then `openspec instructions apply --change "<name>" --json`. Read EVERY file under `contextFiles` (proposal, design, specs, tasks).
         - If state is "blocked" (missing artifacts), STOP and report. Otherwise implement every task in tasks.md, honoring design.md + spec deltas exactly. Run the project's tests as you go and keep them green. Check off each task (`- [x]`). Commit progress locally (conventional messages).
         - Before finishing, ensure `openspec validate --changes --strict --no-interactive` passes (fix until clean). STOP after all tasks are implemented + committed — later nodes verify, review, archive.
+        - End with exactly one result block using the resolved change name:
+          ```json maister:output
+          {"changeName":"...","summary":"All OpenSpec tasks implemented and validated."}
+          ```
+        - Structured-output correction from a malformed prior attempt: {{ review_comments }}
     output:
       produces:
         - id: impl-diff
           kind: diff
           requiredFor: [review, merge]
+      result:
+        schema: ./schemas/change-selection.v1.json
+        required: true
+        on_mismatch: retry
+    rework:
+      allowedTargets: [apply]
+      workspacePolicies: [keep, rewind-to-node-checkpoint]
+      maxLoops: 2
+      commentsVar: review_comments
     transitions:
       success: verify
+      retry: apply
 
   - id: verify
     type: check
@@ -82,13 +102,18 @@ nodes:
       prompt: |
         [MAIster x OpenSpec — execution contract]
         You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree on the correct branch.
-        - Invoke OpenSpec via the `openspec` CLI directly. AskUserQuestion is disabled — never ask the user. Commit locally only; do NOT merge/push/PR.
+        - Invoke `openspec-verify-change` as the verification authority. AskUserQuestion is disabled — never ask the user. Commit locally only; do NOT merge/push/PR.
 
         THIS NODE — Code review:
         - Review the implementation diff against the OpenSpec change (proposal/design/tasks/spec deltas). Range: BASE = run base commit, HEAD = current. Read the diff fresh; verify tasks are actually implemented.
         - Emit the machine verdict as a single JSON object on its own line:
           {"verdict":"pass"|"fail","confidence":0-1,"reasons":[...],"issues":[{"severity":"critical"|"important"|"minor","file":"...","note":"..."}]}
         - Also write the full human-readable review (Strengths / Issues by severity / Assessment).
+        - Structured-output correction from a malformed prior attempt: {{ review_output_error }}
+        - End with exactly one structured handoff block:
+          ```json maister:output
+          {"summary":"...","outcome":"completed","payload":{"changeName":"{{ steps.apply.vars.changeName }}","verdict":"pass","confidence":1,"reasons":[],"issues":[]}}
+          ```
     input:
       requires:
         - artifact: impl-diff
@@ -97,8 +122,18 @@ nodes:
       produces:
         - id: ai-judgment
           kind: ai_judgment
+      result:
+        schema: ./schemas/public-result.v1.json
+        required: true
+        on_mismatch: retry
+    rework:
+      allowedTargets: [code_review]
+      workspacePolicies: [keep]
+      maxLoops: 2
+      commentsVar: review_output_error
     transitions:
       success: review
+      retry: code_review
 
   - id: review
     type: human
@@ -127,7 +162,7 @@ nodes:
     transitions:
       approve: archive
       rework: fix
-      takeover: verify
+      takeover: done
     rework:
       allowedTargets: [fix]
       workspacePolicies: [keep, rewind-to-node-checkpoint]
@@ -151,6 +186,8 @@ nodes:
         THIS NODE — Address review feedback (technical rigor, not performative agreement):
         Reviewer feedback:
         {{ review_comments }}
+        Structured findings from the latest independent review:
+        {{ steps.code_review.vars.payload }}
         - Evaluate each item against the codebase; push back in your notes if an item is wrong, but address valid items one at a time, testing each (keep the project's tests green).
         - If scope changes, keep the OpenSpec change in sync (tasks.md / spec deltas) and ensure `openspec validate --changes --strict --no-interactive` passes.
         - Commit fixes locally with conventional messages. Do NOT merge/push.
@@ -160,7 +197,7 @@ nodes:
   - id: archive
     type: cli
     action:
-      command: "openspec archive -y && openspec validate --specs --strict --no-interactive && git add -A && git commit -m 'docs(openspec): archive change'"
+      command: "openspec archive \"{{ steps.apply.vars.changeName }}\" -y && openspec validate --specs --strict --no-interactive && git add -A && git commit -m 'docs(openspec): archive change'"
     pre_finish:
       gates:
         - id: openspec-touched

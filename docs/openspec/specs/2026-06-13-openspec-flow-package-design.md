@@ -1,5 +1,9 @@
 # OpenSpec flow package — design spec
 
+> Historical v1.0 design record. It describes OpenSpec 1.4.1 and is not the
+> current package contract; see `docs/openspec/README.md` for the v1.12 skill,
+> CLI, and flow model.
+
 **Date:** 2026-06-13 · **Status:** implemented (v1.0.0) · **Author:** brainstormed with the human partner
 
 ## Problem
