@@ -21,8 +21,11 @@ packages/
 | ------- | -------- |
 | [`aif`](packages/aif/) | AI Factory workflows: 5 flows (`aif-dev`, `aif-bugfix`, `aif-evolve`, `aif-roadmap`, `aif-init`) + vendored skills/agents bundle. |
 | [`pstack`](packages/pstack/) | [pstack](https://github.com/cursor/plugins/tree/main/pstack) evidence-first engineering: 8 MAIster-native flows, full vendored skills/agents bundle, typed result profiles, and the `pstack-rigor` Evaluation Method. |
-| [`superpowers`](packages/superpowers/) | [obra/superpowers](https://github.com/obra/superpowers) methodology: 4 flows (`sp-dev`, `sp-debug`, `sp-plan`, `sp-execute`) + full vendored superpowers skills bundle. |
-| [`openspec`](packages/openspec/) | [Fission-AI/OpenSpec](https://github.com/Fission-AI/OpenSpec) spec-driven workflow: 4 flows (`os-dev`, `os-propose`, `os-apply`, `os-init`) driving the `openspec` CLI (installed by `setup.sh` / `os-init`); hybrid `cli`+`ai_coding` nodes, `requirements` launch precondition. Reference-only bundle. |
+| [`superpowers`](packages/superpowers/) | Superpowers v6.3.0: 4 typed governed flows + all 14 upstream skills, with structured design, verification, and review handoffs. |
+| [`openspec`](packages/openspec/) | OpenSpec v1.12.0: 4 spec-driven flows + all 12 upstream Agent Skills, exact-version CLI precondition, and typed change/review handoffs. |
+| [`bmad-bmm`](packages/bmad-bmm/) | BMAD Method v6.11.0: planning, canonical Build, two compatibility flows, 44 upstream skills, runtime support, and 5 platform agents. |
+| [`bmad-tea`](packages/bmad-tea/) | BMAD Test Architect v1.24.0: 5 typed quality flows, 9 upstream skills, and Murat as a platform agent. |
+| [`bmad-cis`](packages/bmad-cis/) | BMAD CIS v0.3.2: a governed RAH discovery flow, 4 upstream workflow skills, and 6 creative platform agents. |
 | [`core`](packages/core/) | First-party platform agents for task triage, Project Brain improvement, and experiment evaluation, plus shared MAIster skills. |
 | [`core-java`](packages/core-java/) | Java and JVM skills for builds, architecture, integration testing, performance analysis, and production diagnostics. |
 | [`core-react`](packages/core-react/) | React and TypeScript frontend skills for components, state and data flow, accessibility, testing, and performance. |
@@ -41,6 +44,10 @@ Per-package reference docs and design specs live under [`docs/`](docs/):
   the design spec (`specs/`).
 - [`docs/openspec/`](docs/openspec/) — OpenSpec package reference + the design
   spec (`specs/`).
+- [`docs/bmad-bmm/`](docs/bmad-bmm/) — BMAD Method package reference.
+- [`docs/bmad-tea/`](docs/bmad-tea/) — BMAD Test Architect package reference.
+- [`docs/bmad-cis/`](docs/bmad-cis/) — BMAD Creative Intelligence Suite package
+  reference.
 
 ## Versioning
 
