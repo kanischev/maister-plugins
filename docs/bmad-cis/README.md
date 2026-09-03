@@ -1,58 +1,22 @@
-# BMAD Method — Creative Intelligence Suite (CIS) package — reference
+# BMAD Creative Intelligence Suite package reference
 
-The **[BMAD Creative Intelligence Suite](https://github.com/bmad-code-org/bmad-module-creative-intelligence-suite)**
-as MAIster platform agents + a creative discovery flow. Package source:
-[`packages/bmad-cis/`](../../packages/bmad-cis/) · quick-start:
-[`packages/bmad-cis/README.md`](../../packages/bmad-cis/README.md).
+The package tracks BMAD CIS `v0.3.2`: four upstream workflow skills and six
+platform agents. Current resolver scripts are installed into each run by the
+internal runtime-support skill, and every upstream call receives an explicit
+project root.
 
-- **Provenance:** BMAD CIS (MIT, © BMad Code, LLC). The 4 creative workflow
-  skills are vendored verbatim from `…@v0.2.1` (`src/skills/*`); the 6 personas
-  are re-authored from `src/skills/bmad-cis-agent-*/customize.toml`. License at
-  `capability/reference/LICENSE.bmad`.
-- **Pin:** package tag `bmad-cis/vX.Y.Z`; upstream CIS pinned to `v0.2.1`.
+`cis-discovery` uses MAIster engine 3.7's governed recursive-agent harness:
 
-## The methodology
+1. An orchestrator submits four read-only agent children: Quinn, Maya, Carson,
+   and Victor.
+2. Each child publishes a `creative-contribution` result with the deterministic
+   `summary`/`outcome` spine and an open JSON payload.
+3. The orchestrator collects all terminal results and records the exact child
+   run ids it consumed.
+4. A single Victor writer checks the synthesis against the repository, writes
+   `docs/planning-artifacts/discovery-brief.md`, and publishes the flow result.
+5. A product-owner gate can approve, rework the whole fan-out, or defer with a
+   typed `needs_input` result.
 
-CIS is BMAD's creative front-end: brainstorming, design thinking, problem
-solving, innovation strategy, storytelling, and presentation — a cast of six
-specialists for the fuzzy front-end *before* requirements exist. In MAIster they
-are platform agents, with a `cis-discovery` flow that chains three of them into
-a phase-0 pipeline feeding the SDLC.
-
-## Flow
-
-`cis-discovery` (`compat.engine_min: 1.5.0`):
-
-```
-substrate → frame[quinn]      (bmad-cis-problem-solving   → docs/discovery/framing.md)
-          → ideate[maya]      (bmad-cis-design-thinking   → docs/discovery/concepts.md)
-          → synthesize[victor](bmad-cis-innovation-strategy → docs/planning-artifacts/discovery-brief.md)
-          → 🚪 review (approve / rework→ideate) → done
-```
-
-- Typed artifacts chain `framing → concepts → discovery-brief` (`generic_file`).
-- `synthesize` is gated by a `command_check`
-  (`test -s docs/planning-artifacts/discovery-brief.md`).
-- The brief lands in `docs/planning-artifacts/` precisely so the `bmm-plan` flow
-  consumes it (committed-artifact handoff; live cross-package binding = Phase 2).
-
-## Capability bundle
-
-`capability/skills/*` vendors 4 CIS workflow skills (materialised into each
-session's `.claude/skills/`). The 6 personas live at the package-root `agents/`
-dir, auto-scanned into the catalog. `capability/reference/` is provenance only.
-
-## Reconciliation
-
-Same mapping as [`bmad-bmm`](../bmad-bmm/README.md#reconciliation-bmad-interactivity--maister-hitl):
-agent activation/menu dropped (headless persona); per-step elicitation → the
-`human` review gate; `_bmad/cis/config.yaml` written by the `substrate` `cli`
-node; MAIster owns branch/merge/PR.
-
-## Scope (v1)
-
-1 flow (`cis-discovery`, the multi-persona phase-0). Carson (brainstorming) and
-Caravaggio (presentation) have no vendored workflow skill — their method lives
-in their persona body and they are standalone-only. Storyteller Sophia is
-standalone (her `bmad-cis-storytelling` skill is vendored). Per-method flows and
-live `cis-discovery → bmm-plan` wiring are Phase 2.
+Read-only child workspaces plus one writer avoid concurrent branch mutation.
+The reviewed discovery brief remains directly consumable by `bmm-plan`.

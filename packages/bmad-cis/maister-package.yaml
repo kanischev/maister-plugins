@@ -4,25 +4,25 @@
 # a field in this file.
 #
 # NOTE: the upstream BMAD Creative Intelligence Suite version this package
-# vendors (v0.2.1) is recorded in metadata.sources and the README — independent
+# vendors (v0.3.2) is recorded in metadata.sources and the README — independent
 # of this package's own git tag.
 schemaVersion: 1
 name: bmad-cis
 metadata:
   title: "BMAD Method — Creative Intelligence Suite (CIS)"
-  summary: "BMAD Creative Intelligence Suite as MAIster platform agents + a creative discovery flow. Six creative personas (Sophia/Storyteller, Maya/Design-Thinking, Carson/Brainstorming, Dr. Quinn/Problem-Solver, Victor/Innovation, Caravaggio/Presentation). The cis-discovery flow runs a multi-persona phase-0 (frame -> ideate -> synthesize brief) whose output feeds bmm-plan."
+  summary: "BMAD Creative Intelligence Suite v0.3.2 as six MAIster platform agents plus a governed RAH discovery flow that fans out read-only creative perspectives, synthesizes them, and hands a reviewed brief to bmm-plan."
   links:
     - { kind: framework, title: "BMAD Creative Intelligence Suite", url: "https://github.com/bmad-code-org/bmad-module-creative-intelligence-suite" }
   sources:
-    - { component: "capability/skills/bmad-cis-{design-thinking,innovation-strategy,problem-solving,storytelling} + agents/* (personas derived from src/skills/bmad-cis-agent-* customize.toml)", origin: "github.com/bmad-code-org/bmad-module-creative-intelligence-suite@v0.2.1" }
-    - { component: "capability/reference/LICENSE.bmad", origin: "github.com/bmad-code-org/bmad-module-creative-intelligence-suite@v0.2.1 (MIT, © BMad Code, LLC)" }
+    - { component: "capability/skills/bmad-cis-{design-thinking,innovation-strategy,problem-solving,storytelling} + maister-agents/*", origin: "github.com/bmad-code-org/bmad-module-creative-intelligence-suite@v0.3.2 (97298b22fee1c7e482710d3a8414adb5cfccccd9)" }
+    - { component: "capability/skills/bmad-runtime-support + capability/reference/LICENSE.bmad", origin: "BMAD v6.11.0 resolver scripts + BMAD CIS v0.3.2 MIT license" }
 flows:
   - { id: cis-discovery, path: flows/discovery }
-# The whole capability/ subtree ships; only capability/skills/ is materialized
-# into the run worktree's .claude/ (capability/reference/* is provenance only).
-# The 6 personas live at the package-root agents/ dir, auto-scanned into the
-# catalog. Carson + Caravaggio have no vendored workflow skill (method lives in
-# their persona body); they are standalone-only in v1.
+# capability/skills is materialized into `.claude/skills/`; reference/ is
+# provenance-only. The six personas are indexed from maister-agents/.
 capabilities:
   - { id: cis-bundle, path: capability }
 mcps: []
+result_profiles:
+  creative-contribution:
+    schema: ./schemas/creative-contribution.v1.json

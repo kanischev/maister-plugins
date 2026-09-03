@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "fields": [
+    { "name": "summary", "type": "string", "required": true },
+    {
+      "name": "outcome",
+      "type": "enum",
+      "required": true,
+      "options": ["success", "blocked"]
+    },
+    {
+      "name": "consumedChildRunIds",
+      "type": "array",
+      "required": true,
+      "items": { "type": "string" }
+    },
+    { "name": "payload", "type": "json", "required": true }
+  ]
+}

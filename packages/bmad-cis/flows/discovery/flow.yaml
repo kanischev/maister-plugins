@@ -1,14 +1,16 @@
 schemaVersion: 1
 name: cis-discovery
 metadata:
-  title: "CIS — Discovery (creative phase-0)"
-  summary: "Multi-persona creative discovery feeding the SDLC: Dr. Quinn frames the problem (systematic problem-solving) -> Maya ideates human-centered concepts (design thinking) -> Victor assesses innovation value and writes a discovery brief (innovation strategy) -> human review. The brief lands in docs/planning-artifacts/ so bmm-plan can consume it."
-  labels: [discovery, ideation, creative, phase-0, cis, bmad]
-  route_when: "Explore a fuzzy problem/opportunity before planning: frame -> ideate -> assess -> discovery brief."
+  title: "CIS — Governed discovery"
+  summary: "RAH fan-out over four read-only CIS personas -> collected synthesis -> one writer produces the discovery brief -> human approve, rework, or defer."
+  labels: [discovery, ideation, creative, rah, cis, bmad]
+  route_when: "Explore a fuzzy problem or opportunity before planning, with independent creative lenses and a governed human handoff."
   links:
     - { kind: framework, title: "BMAD Creative Intelligence Suite", url: "https://github.com/bmad-code-org/bmad-module-creative-intelligence-suite" }
   sources:
-    - { component: "capability/skills/bmad-cis-{problem-solving,design-thinking,innovation-strategy}", origin: "github.com/bmad-code-org/bmad-module-creative-intelligence-suite@v0.2.1" }
+    - { component: "capability/skills/bmad-cis-* + maister-agents/*", origin: "github.com/bmad-code-org/bmad-module-creative-intelligence-suite@v0.3.2" }
+compat:
+  engine_min: 3.7.0
 runner_profiles:
   claude-code:
     capability_agent: claude
@@ -16,109 +18,112 @@ runner_profiles:
     model: claude-opus-4-8
     provider:
       kind: anthropic
-# settings.agent binding (M34) -> engine_min >= 1.5.0; typed artifacts (1.2.0),
-# retry/session policies (1.4.0); first-class sessions (M42, ADR-114) -> >= 2.0.0.
-compat:
-  engine_min: 2.0.0
 defaults:
   session_policy: resume
-# M42 (ADR-114): each creative persona runs in its OWN session so the handoff is a
-# clean baton pass — Dr. Quinn frames (`frame`), Maya ideates (`ideate`), Victor
-# synthesizes the brief (`synthesize`) — rather than one accumulating context.
-# Every session inherits the flow's one claude-code runner (the persona is the
-# `settings.agent` body); state flows through the typed artifacts (framing,
-# concepts, discovery-brief). The review->ideate rework keeps `resume` so Maya
-# retains her concepts + the reviewer's critique on a redo.
 sessions:
-  frame: { runner: claude-code }
-  ideate: { runner: claude-code }
+  orchestrate: { runner: claude-code }
   synthesize: { runner: claude-code }
-verdict_calibration:
-  confidence_min: 0.7
+result:
+  export:
+    schema: ./schemas/public-result.v1.json
+    from: [synthesize, deferred]
+    required: true
 nodes:
   - id: substrate
     type: cli
     action:
-      command: |
-        set -e
-        mkdir -p _bmad/cis docs/planning-artifacts docs/discovery
-        if [ ! -f _bmad/cis/config.yaml ]; then
-          printf '%s\n' \
-            'project_name: "{{ run.projectSlug }}"' \
-            'user_name: "MAIster"' \
-            'communication_language: "English"' \
-            'document_output_language: "English"' \
-            'output_folder: "docs"' \
-            'visual_tools: "intermediate"' \
-            > _bmad/cis/config.yaml
-        fi
-        echo "[cis substrate] _bmad/cis/config.yaml ready"
+      command: '.claude/skills/bmad-runtime-support/prepare.sh "{{ run.projectSlug }}"'
     transitions:
-      success: frame
+      success: orchestrate
 
-  - id: frame
-    type: ai_coding
-    # M42: Dr. Quinn's own session.
-    session: frame
-    settings:
-      agent: bmad-cis:quinn-problem-solver
-      permissionMode: allow
-    retry_policy:
-      attempts: 2
-      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
-      workspace: rewind-to-node-checkpoint
+  - id: orchestrate
+    type: orchestrator
+    session: orchestrate
     action:
       prompt: |
-        [MAIster x BMAD — execution contract]
-        You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree on the correct branch. AskUserQuestion is DISABLED — never ask the user; make best-judgment decisions; corrections arrive via the HITL review gate. MAIster owns git + promotion: commit locally only; do NOT create worktrees/branches, merge, push, or open PRs. Inside any BMad skill, IGNORE the "On Activation / greet / present menu / STOP and wait for input" steps — execute the skill's <workflow> body directly. Load config from _bmad/cis/config.yaml.
+        You coordinate a governed, read-only creative discovery for:
+        {{ task.prompt }}
 
-        THIS NODE — Frame the problem (Dr. Quinn):
-        - Idea / task: {{ task.prompt }}
-        - Drive the `bmad-cis-problem-solving` skill autonomously: frame the real problem/opportunity, hunt root causes (TRIZ / Theory of Constraints / Systems Thinking), and state the core question crisply. Write the framing to docs/discovery/framing.md. No placeholders.
-        - Commit locally (e.g. "docs(cis): problem framing").
-    output:
-      produces:
-        - id: framing
-          kind: generic_file
-    transitions:
-      success: ideate
-
-  - id: ideate
-    type: ai_coding
-    # M42: Maya's own session (fresh from Quinn's framing context).
-    session: ideate
-    settings:
-      agent: bmad-cis:maya-design-thinking
-      permissionMode: allow
-    retry_policy:
-      attempts: 2
-      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
-      workspace: rewind-to-node-checkpoint
-    action:
-      prompt: |
-        [MAIster x BMAD — execution contract]
-        You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree. AskUserQuestion is DISABLED — never ask the user; corrections arrive via the HITL review gate. Commit locally only; do NOT merge/push/PR. Inside any BMad skill, skip its activation/greet/menu steps and execute the <workflow> body. Load config from _bmad/cis/config.yaml.
-
-        THIS NODE — Ideate human-centered concepts (Maya):
-        - Read the framing under docs/discovery/framing.md. Drive the `bmad-cis-design-thinking` skill autonomously: diverge into human-centered solution concepts grounded in genuine user needs, then converge on the strongest few. Write the concepts to docs/discovery/concepts.md. No placeholders.
-        - Commit locally (e.g. "docs(cis): solution concepts").
-
-        Reviewer feedback from a prior review (empty on first pass):
+        Human guidance from a prior escalation or final review, when present:
         {{ review_comments }}
-    input:
-      requires:
-        - artifact: framing
-          kind: generic_file
+
+        Use `run_plan` to launch exactly four independent AGENT children with
+        `mode: "run"`, `workspace: "repo_read"`, and
+        `resultProfile: "creative-contribution"`:
+        - `bmad-cis:quinn-problem-solver`: root causes, system constraints, and the sharp problem frame.
+        - `bmad-cis:maya-design-thinking`: users, unmet needs, and human-centered concepts.
+        - `bmad-cis:carson-brainstorming`: deliberately divergent options and constraint-breaking ideas.
+        - `bmad-cis:victor-innovation`: strategic value, differentiation, and business-model implications.
+
+        Each child prompt must forbid repository writes and require its final
+        answer to end with exactly one result block shaped as:
+
+        ```json maister:output
+        {"summary":"...","outcome":"completed","payload":{}}
+        ```
+
+        Wait for all children, collect every terminal result with `run_collect`,
+        and synthesize only evidence you actually consumed. If a child fails,
+        retry it once when budget permits; otherwise explain the missing lens.
+        End your own final answer with exactly one block shaped as:
+
+        ```json maister:output
+        {"summary":"...","outcome":"success","consumedChildRunIds":["..."],"payload":{"problemFrame":{},"userNeeds":[],"concepts":[],"strategicAssessment":{},"risks":[],"recommendation":{}}}
+        ```
+
+        If no defensible recommendation can be made, use `"outcome":"blocked"`
+        and put the unresolved decisions in `payload`.
+    settings:
+      enforcement:
+        tools: strict
+      tools:
+        claude: [Read, Grep, Glob]
+        codex: [shell]
+      delegation:
+        max_depth: 1
+        max_fanout: 4
+        max_active_children: 4
+        budget:
+          max_tokens: 600000
+          wall_clock_minutes: 90
+          max_child_runs: 8
+          consecutive_failures: 2
     output:
-      produces:
-        - id: concepts
-          kind: generic_file
+      result:
+        schema: ./schemas/discovery-synthesis.v1.json
+        required: true
+        on_mismatch: retry
+    decide:
+      from: output.outcome
+    rework:
+      allowedTargets: [orchestrate]
+      workspacePolicies: [keep]
+      maxLoops: 2
+      commentsVar: review_comments
     transitions:
       success: synthesize
+      blocked: escalation
+      retry: orchestrate
+
+  - id: escalation
+    type: human
+    finish:
+      human:
+        role: product-owner
+        decisions: [continue, rework, defer]
+        commentsVar: review_comments
+    transitions:
+      continue: synthesize
+      rework: orchestrate
+      defer: deferred
+    rework:
+      allowedTargets: [orchestrate]
+      workspacePolicies: [keep]
+      maxLoops: 2
+      commentsVar: review_comments
 
   - id: synthesize
     type: ai_coding
-    # M42: Victor's own session.
     session: synthesize
     settings:
       agent: bmad-cis:victor-innovation
@@ -129,20 +134,25 @@ nodes:
       workspace: rewind-to-node-checkpoint
     action:
       prompt: |
-        [MAIster x BMAD — execution contract]
-        You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree. AskUserQuestion is DISABLED — never ask the user. Commit locally only; do NOT merge/push/PR. Inside any BMad skill, skip its activation/greet/menu steps and execute the <workflow> body. Load config from _bmad/cis/config.yaml.
+        [MAIster x BMAD CIS — writer contract]
+        You are the only writer in this discovery tree. MAIster owns git and
+        promotion: do not create branches/worktrees, merge, push, or open a PR.
 
-        THIS NODE — Assess value + write the discovery brief (Victor):
-        - Read docs/discovery/framing.md and docs/discovery/concepts.md. Drive the `bmad-cis-innovation-strategy` skill autonomously: assess the business/innovation value (Jobs-to-be-Done, disruption/Blue-Ocean lens) and select the winning direction.
-        - Synthesize a concise DISCOVERY BRIEF and write it to docs/planning-artifacts/discovery-brief.md (problem, target user, winning concept, value proposition, key risks, recommended next step). This brief is the handoff to the bmm-plan flow.
-        - Commit locally (e.g. "docs(cis): discovery brief"). STOP after the brief — the next node reviews it.
+        Task: {{ task.prompt }}
+        Collected synthesis: {{ steps.orchestrate.vars.payload }}
+        Human guidance, when present: {{ review_comments }}
 
-        Reviewer feedback from a prior review (empty on first pass):
-        {{ review_comments }}
-    input:
-      requires:
-        - artifact: concepts
-          kind: generic_file
+        Check the synthesis against the repository, resolve contradictions, and
+        write `docs/planning-artifacts/discovery-brief.md` with the problem,
+        target users, strongest concepts, value thesis, evidence, risks,
+        assumptions, and recommended next step. Commit the brief locally.
+
+        End with exactly one machine result block:
+        ```json maister:output
+        {"summary":"...","outcome":"completed","payload":{"artifact":"docs/planning-artifacts/discovery-brief.md","sourceRunIds":[],"recommendation":{}}}
+        ```
+        Populate `sourceRunIds` from
+        {{ steps.orchestrate.vars.consumedChildRunIds }}.
     pre_finish:
       gates:
         - id: brief-written
@@ -153,21 +163,61 @@ nodes:
       produces:
         - id: discovery-brief
           kind: generic_file
+      result:
+        schema: ./schemas/public-result.v1.json
+        required: true
+        on_mismatch: retry
+    rework:
+      allowedTargets: [synthesize]
+      workspacePolicies: [keep, rewind-to-node-checkpoint]
+      maxLoops: 2
+      commentsVar: review_comments
     transitions:
       success: review
+      retry: synthesize
 
   - id: review
     type: human
+    input:
+      requires:
+        - artifact: discovery-brief
+          kind: generic_file
     finish:
       human:
-        role: maintainer
-        decisions: [approve, rework]
+        role: product-owner
+        decisions: [approve, rework, defer]
         commentsVar: review_comments
     transitions:
       approve: done
-      rework: ideate
+      rework: orchestrate
+      defer: deferred
     rework:
-      allowedTargets: [ideate]
+      allowedTargets: [orchestrate]
       workspacePolicies: [keep, rewind-to-node-checkpoint]
       maxLoops: 3
       commentsVar: review_comments
+
+  - id: deferred
+    type: ai_coding
+    action:
+      prompt: |
+        Do not modify the repository. Summarize why discovery was deferred and
+        what decision or evidence is needed to resume.
+        Human comments or structured-output correction: {{ review_comments }}
+        End with exactly:
+        ```json maister:output
+        {"summary":"Discovery deferred by the human gate.","outcome":"needs_input","payload":{"resumeRequirements":[]}}
+        ```
+    output:
+      result:
+        schema: ./schemas/public-result.v1.json
+        required: true
+        on_mismatch: retry
+    rework:
+      allowedTargets: [deferred]
+      workspacePolicies: [keep]
+      maxLoops: 1
+      commentsVar: review_comments
+    transitions:
+      success: done
+      retry: deferred
