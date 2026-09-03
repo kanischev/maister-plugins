@@ -1,5 +1,9 @@
 # Superpowers flow package — design spec
 
+> Historical v1.0 design record. It describes Superpowers 5.1 behavior and is
+> not the current package contract; see `docs/superpowers/README.md` for the
+> v6.3 flow and runtime model.
+
 **Date:** 2026-06-13 · **Status:** implemented (v1.0.0) · **Author:** brainstormed with the human partner
 
 ## Problem

@@ -9,7 +9,7 @@ metadata:
     - { kind: framework, title: "Superpowers", url: "https://github.com/obra/superpowers" }
     - { kind: docs, title: "brainstorming + writing-plans", url: "https://github.com/obra/superpowers/tree/main/skills" }
   sources:
-    - { component: "skills/* (all 14)", origin: "github.com/obra/superpowers@5.1.0" }
+    - { component: "capability/skills/* (all 14)", origin: "github.com/obra/superpowers@v6.3.0" }
 runner_profiles:
   claude-code:
     capability_agent: claude
@@ -20,9 +20,14 @@ runner_profiles:
 # Mutation gate (must_touch) -> engine_min >= 1.3.0; retry/session -> >= 1.4.0;
 # typed Plan-review artifacts and decisions -> >= 3.1.0.
 compat:
-  engine_min: 3.1.0
+  engine_min: 3.7.0
 defaults:
   session_policy: resume
+result:
+  export:
+    schema: ./schemas/public-result.v1.json
+    from: [finalize, deferred]
+    required: true
 nodes:
   - id: brainstorm
     type: ai_coding
@@ -46,26 +51,43 @@ nodes:
         - Run brainstorming non-interactively: explore the codebase for context, make the best-judgment choices it would otherwise ask about, and capture them in an explicit "Assumptions & open questions" section. Do NOT use the visual companion.
         - Write the design to docs/superpowers/specs/<today YYYY-MM-DD>-<kebab-topic>-design.md covering: problem, 2-3 approaches + chosen + why, architecture, components/interfaces, data flow, error handling, testing strategy, assumptions & open questions.
         - STOP after writing + committing the spec — the next MAIster node turns it into a plan.
+        - End with exactly one structured handoff block:
+          ```json maister:output
+          {"summary":"...","outcome":"completed","payload":{"designSpec":"...","chosenApproach":"...","assumptions":[],"openQuestions":[]}}
+          ```
 
         Reviewer feedback from a prior design_review (empty on first pass):
         {{ design_review_comments }}
+        Structured-output correction from a malformed prior attempt:
+        {{ brainstorm_output_error }}
     output:
       produces:
         - id: design-spec
           kind: generic_file
+      result:
+        schema: ./schemas/public-result.v1.json
+        required: true
+        on_mismatch: retry
+    rework:
+      allowedTargets: [brainstorm]
+      workspacePolicies: [keep, rewind-to-node-checkpoint]
+      maxLoops: 2
+      commentsVar: brainstorm_output_error
     transitions:
       success: design_review
+      retry: brainstorm
 
   - id: design_review
     type: human
     finish:
       human:
         role: maintainer
-        decisions: [approve, rework]
+        decisions: [approve, rework, defer]
         commentsVar: design_review_comments
     transitions:
       approve: plan
       rework: brainstorm
+      defer: deferred
     rework:
       allowedTargets: [brainstorm]
       workspacePolicies: [keep]
@@ -89,7 +111,8 @@ nodes:
 
         THIS NODE — Plan (superpowers:writing-plans):
         Use the superpowers:writing-plans skill to turn the approved design spec into a bite-sized, TDD-structured implementation plan.
-        - Read the approved design spec under docs/superpowers/specs/.
+        - Use the approved structured design handoff below; read the referenced spec from disk before planning:
+          {{ steps.brainstorm.vars.payload }}
         - Write the plan to docs/superpowers/plans/<today YYYY-MM-DD>-<kebab-topic>.md with the required plan header, exact file paths, complete code per step, exact test commands + expected output, frequent commits. No placeholders.
         - Run the skill's self-review (spec coverage, placeholder scan, type consistency) and fix inline.
         - STOP after writing + committing the plan. Do NOT offer execution choices or implement — this is a planning-only flow; execution happens later via sp-execute.
@@ -100,11 +123,18 @@ nodes:
         Typed Plan-review answers from a prior decision cycle (empty on first pass):
         {{ plan_review_answers }}
 
+        Structured-output correction from a malformed prior attempt:
+        {{ plan_output_error }}
+
         Write the final Markdown implementation plan to $MAISTER_PLAN_DOCUMENT_FILE.
         Write its strict PlanReviewV1 JSON companion to $MAISTER_PLAN_REVIEW_FILE.
         Classify non-blocking assumptions separately from blocking decisions. Every
         decision must offer 2-8 concrete options with stable ids and consequences;
         never infer choices from prose or copy secret values into either artifact.
+        End with exactly one structured handoff block:
+        ```json maister:output
+        {"summary":"...","outcome":"completed","payload":{"designSpec":"...","implementationPlan":"...","assumptions":[],"blockingDecisions":[]}}
+        ```
     input:
       requires:
         - artifact: design-spec
@@ -117,8 +147,18 @@ nodes:
         - id: plan-review
           kind: plan
           current: true
+      result:
+        schema: ./schemas/public-result.v1.json
+        required: true
+        on_mismatch: retry
+    rework:
+      allowedTargets: [plan]
+      workspacePolicies: [keep, rewind-to-node-checkpoint]
+      maxLoops: 2
+      commentsVar: plan_output_error
     transitions:
       success: plan_review
+      retry: plan
 
   - id: plan_review
     type: human
@@ -157,8 +197,16 @@ nodes:
         - AskUserQuestion is disabled; never ask the user. Tool-permission prompts are handled by the platform.
 
         THIS NODE — Commit the planning artifacts:
+        - Use these approved structured handoffs as the exact artifact pointers:
+          design: {{ steps.brainstorm.vars.payload }}
+          plan: {{ steps.plan.vars.payload }}
         - Ensure the approved spec (docs/superpowers/specs/) and plan (docs/superpowers/plans/) are committed locally with a conventional message (e.g. "docs: add <topic> design spec + implementation plan").
         - The tracked working tree MUST end clean. Do NOT merge, push, open a PR, or remove the worktree — MAIster owns promotion.
+        - End with exactly one result block:
+          ```json maister:output
+          {"summary":"...","outcome":"completed","payload":{"designSpec":"...","implementationPlan":"...","assumptions":[],"openQuestions":[]}}
+          ```
+        - Structured-output correction from a malformed prior attempt: {{ finalize_output_error }}
     pre_finish:
       gates:
         # The run's whole changeset is the planning docs; assert they were
@@ -175,5 +223,40 @@ nodes:
           kind: command_check
           mode: blocking
           command: "test -z \"$(git status --porcelain --untracked-files=no)\""
+    output:
+      result:
+        schema: ./schemas/public-result.v1.json
+        required: true
+        on_mismatch: retry
+    rework:
+      allowedTargets: [finalize]
+      workspacePolicies: [keep]
+      maxLoops: 2
+      commentsVar: finalize_output_error
     transitions:
       success: done
+      retry: finalize
+
+  - id: deferred
+    type: ai_coding
+    action:
+      prompt: |
+        Do not modify the repository. Summarize why planning was deferred and
+        what decisions are needed to resume. End with exactly:
+        ```json maister:output
+        {"summary":"Superpowers planning deferred by the human gate.","outcome":"needs_input","payload":{"resumeRequirements":[]}}
+        ```
+        Structured-output correction from a malformed prior attempt: {{ deferred_output_error }}
+    output:
+      result:
+        schema: ./schemas/public-result.v1.json
+        required: true
+        on_mismatch: retry
+    rework:
+      allowedTargets: [deferred]
+      workspacePolicies: [keep]
+      maxLoops: 1
+      commentsVar: deferred_output_error
+    transitions:
+      success: done
+      retry: deferred

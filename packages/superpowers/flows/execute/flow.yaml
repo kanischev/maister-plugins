@@ -9,7 +9,7 @@ metadata:
     - { kind: framework, title: "Superpowers", url: "https://github.com/obra/superpowers" }
     - { kind: docs, title: "executing-plans / subagent-driven-development", url: "https://github.com/obra/superpowers/tree/main/skills" }
   sources:
-    - { component: "skills/* (all 14)", origin: "github.com/obra/superpowers@5.1.0" }
+    - { component: "capability/skills/* (all 14)", origin: "github.com/obra/superpowers@v6.3.0" }
 runner_profiles:
   claude-code:
     capability_agent: claude
@@ -20,11 +20,16 @@ runner_profiles:
 # Typed artifacts -> engine_min >= 1.2.0; retry/session policies -> >= 1.4.0;
 # first-class sessions (M42, ADR-114) -> engine_min >= 2.0.0.
 compat:
-  engine_min: 2.0.0
+  engine_min: 3.7.0
 # Rework re-entry resumes the prior ACP session by default; the review->fix loop
 # overrides with session_policy: new_session for a clean re-attempt.
 defaults:
   session_policy: resume
+result:
+  export:
+    schema: ./schemas/public-result.v1.json
+    from: [finalize]
+    required: true
 # M42 (ADR-114): first-class sessions split the reused agent context into
 # fresh-context phases — verify / fix / finalize — each inheriting the flow's one
 # claude-code runner (no new runners). State flows through the typed artifacts
@@ -63,7 +68,7 @@ nodes:
         THIS NODE — Execute the existing plan:
         Execution mode = {{ steps.intake.vars.execution }}.
         - The task identifies the plan to execute: {{ task.prompt }}. Locate it under docs/superpowers/plans/ (or the path given). Review it critically FIRST; if it has critical gaps, record them in your notes and proceed with best judgment (do not silently guess past a real blocker — finish with a clear report instead).
-        - If execution mode is "subagent-driven": use superpowers:subagent-driven-development — fresh implementer subagent per task (template .claude/skills/subagent-driven-development/implementer-prompt.md) + two-stage review (spec then code-quality), looping until clean. If nested subagent dispatch is unavailable, fall back to "inline".
+        - If execution mode is "subagent-driven": use superpowers:subagent-driven-development and follow its current v6.3 task-brief, one-review-per-task, re-review, and final broad review protocol exactly. Do not substitute the removed spec-reviewer/code-quality-reviewer split. If governed subagent dispatch is unavailable, fail with an actionable blocker instead of silently changing execution mode.
         - If execution mode is "inline": use superpowers:executing-plans — execute every task in order in this session.
         - EITHER WAY follow superpowers:test-driven-development for every task (RED -> watch fail -> GREEN -> REFACTOR). Commit after each green step (conventional messages). TDD discipline = {{ steps.intake.vars.tdd }}.
         - STOP after all plan tasks are implemented, tested, and committed — later nodes verify, review, and finalize. Do NOT run finishing-a-development-branch and do NOT merge/push.
@@ -94,6 +99,11 @@ nodes:
         - RUN the project's full verification with fresh, complete commands (auto-detect the stack: pnpm/npm test + lint + typecheck + build, cargo test, pytest, go test ./..., etc.). Read full output, count failures, check exit codes.
         - Write a concise verification report (commands + results + pass/fail) to your output.
         - If verification fails, treat it as a bug: superpowers:systematic-debugging + superpowers:test-driven-development, re-run until green. Commit fixes locally.
+        - Structured-output correction from a malformed prior attempt: {{ verification_output_error }}
+        - End with exactly one structured handoff block:
+          ```json maister:output
+          {"summary":"...","outcome":"completed","payload":{"verdict":"pass","commands":[],"failures":[],"evidence":[]}}
+          ```
     input:
       requires:
         - artifact: impl-diff
@@ -102,8 +112,18 @@ nodes:
       produces:
         - id: sp-gate-result
           kind: test_report
+      result:
+        schema: ./schemas/public-result.v1.json
+        required: true
+        on_mismatch: retry
+    rework:
+      allowedTargets: [verify]
+      workspacePolicies: [keep, rewind-to-node-checkpoint]
+      maxLoops: 2
+      commentsVar: verification_output_error
     transitions:
       success: code_review
+      retry: verify
 
   - id: code_review
     type: ai_coding
@@ -121,11 +141,18 @@ nodes:
 
         THIS NODE — Code review (superpowers:requesting-code-review):
         Use the superpowers:requesting-code-review skill to independently review the implementation against the plan.
+        - Treat this structured verification handoff as evidence, then confirm it against the current tree:
+          {{ steps.verify.vars.payload }}
         - Range: BASE = the run's base commit, HEAD = current commit.
         - If nested subagent dispatch is available (Task tool), dispatch a code-reviewer subagent with .claude/skills/requesting-code-review/code-reviewer.md; otherwise perform the review yourself with that exact rubric (read the diff fresh).
         - Emit the machine verdict as a single JSON object on its own line:
           {"verdict":"pass"|"fail","confidence":0-1,"reasons":[...],"issues":[{"severity":"critical"|"important"|"minor","file":"...","note":"..."}]}
         - Also write the full human-readable review (Strengths / Issues by severity / Assessment) to your output.
+        - Structured-output correction from a malformed prior attempt: {{ review_output_error }}
+        - End with exactly one structured handoff block:
+          ```json maister:output
+          {"summary":"...","outcome":"completed","payload":{"verdict":"pass","confidence":1,"reasons":[],"issues":[]}}
+          ```
     input:
       requires:
         - artifact: impl-diff
@@ -134,8 +161,18 @@ nodes:
       produces:
         - id: ai-judgment
           kind: ai_judgment
+      result:
+        schema: ./schemas/public-result.v1.json
+        required: true
+        on_mismatch: retry
+    rework:
+      allowedTargets: [code_review]
+      workspacePolicies: [keep]
+      maxLoops: 2
+      commentsVar: review_output_error
     transitions:
       success: review
+      retry: code_review
 
   - id: review
     type: human
@@ -191,6 +228,8 @@ nodes:
         Use the superpowers:receiving-code-review skill to act on the reviewer's feedback with technical rigor (verify before implementing; push back in your notes if an item is wrong; no performative agreement).
         Reviewer feedback:
         {{ review_comments }}
+        Structured findings from the latest independent review:
+        {{ steps.code_review.vars.payload }}
         - Implement valid items one at a time, testing each. For any bug use superpowers:systematic-debugging + superpowers:test-driven-development.
         - Commit fixes locally with conventional messages. Do NOT merge/push.
     transitions:
@@ -212,13 +251,32 @@ nodes:
 
         THIS NODE — Finalize (superpowers:finishing-a-development-branch, MAIster-neutralized):
         - Run the project's full verification one final time (superpowers:verification-before-completion) and confirm it passes with fresh evidence.
+        - Reconcile the latest structured verification and review handoffs with the current tree:
+          verification: {{ steps.verify.vars.payload }}
+          review: {{ steps.code_review.vars.payload }}
         - Ensure ALL work is committed: commit any tracked changes locally with a conventional message. The tree MUST be clean.
         - Then STOP — the skill's "Keep as-is" path. Do NOT merge, push, open a PR, present options, or remove the worktree. MAIster owns promotion.
+        - Structured-output correction from a malformed prior attempt: {{ finalize_output_error }}
+        - End with exactly one result block:
+          ```json maister:output
+          {"summary":"...","outcome":"completed","payload":{"verification":{},"review":{}}}
+          ```
     pre_finish:
       gates:
         - id: tree-clean-gate
           kind: command_check
           mode: blocking
           command: "test -z \"$(git status --porcelain --untracked-files=no)\""
+    output:
+      result:
+        schema: ./schemas/public-result.v1.json
+        required: true
+        on_mismatch: retry
+    rework:
+      allowedTargets: [finalize]
+      workspacePolicies: [keep]
+      maxLoops: 2
+      commentsVar: finalize_output_error
     transitions:
       success: done
+      retry: finalize
