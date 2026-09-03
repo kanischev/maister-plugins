@@ -1,0 +1,2 @@
+# Preserve vendored upstream bytes, including CRLF data files.
+capability/skills/** -text

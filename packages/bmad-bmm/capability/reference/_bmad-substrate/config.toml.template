@@ -1,0 +1,14 @@
+# Current BMAD 6.11 central configuration. The MAIster runtime support skill
+# creates this idempotently and preserves any project-supplied values.
+[core]
+project_name = "<project-slug>"
+user_name = "MAIster"
+communication_language = "English"
+document_output_language = "English"
+output_folder = "docs"
+
+[modules.bmm]
+user_skill_level = "expert"
+planning_artifacts = "docs/planning-artifacts"
+implementation_artifacts = "docs/implementation-artifacts"
+project_knowledge = "docs"

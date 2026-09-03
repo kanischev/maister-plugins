@@ -1,16 +1,12 @@
-# Canonical BMad core+bmm config that the vendored skills read from
-# `{project-root}/_bmad/bmm/config.yaml`. In MAIster this file is NOT installed
-# by setup.sh (setup.sh runs in the package dir, not the project repo). Each
-# flow's leading `substrate` cli node writes this into the run worktree
-# idempotently, with `project_name` filled from `{{ run.projectSlug }}`.
-#
-# Keys mirror BMAD v6.8.0 core-skills/module.yaml + bmm-skills/module.yaml.
+# Legacy YAML compatibility config created by bmad-runtime-support/prepare.sh.
+# Current rendered BMAD 6.11 skills use `_bmad/config.toml`; retained v6 shims
+# still read this module-local file.
 project_name: "<project-slug>"
 user_name: "MAIster"
 communication_language: "English"
 document_output_language: "English"
 user_skill_level: "expert"
-output_folder: "_bmad-output"
+output_folder: "docs"
 planning_artifacts: "docs/planning-artifacts"
 implementation_artifacts: "docs/implementation-artifacts"
 project_knowledge: "docs"

@@ -1,0 +1,202 @@
+schemaVersion: 1
+name: bmm-build
+metadata:
+  title: "BMAD — Build"
+  summary: "Official BMAD 6.11 implementation loop -> independent code review -> human approve, rework, or takeover, with a typed public result for parent orchestrators."
+  labels: [implementation, build, dev, tdd, bmad]
+  route_when: "Build, fix, refactor, or implement a story with the current BMAD workflow and governed review."
+  links:
+    - { kind: framework, title: "BMAD Method", url: "https://github.com/bmad-code-org/BMAD-METHOD" }
+  sources:
+    - { component: "capability/skills/bmad-{build,code-review}", origin: "github.com/bmad-code-org/BMAD-METHOD@v6.11.0" }
+compat:
+  engine_min: 3.7.0
+runner_profiles:
+  claude-code:
+    capability_agent: claude
+    adapter: claude
+    model: claude-opus-4-8
+    provider:
+      kind: anthropic
+defaults:
+  session_policy: resume
+sessions:
+  build: { runner: claude-code }
+  review: { runner: claude-code }
+requirements:
+  - name: "uv with Python 3.11+"
+    probe: "command -v uv"
+    hint: "install uv and ensure Python 3.11 or newer is available"
+result:
+  export:
+    schema: ./schemas/public-result.v1.json
+    from: [review_agent, handoff]
+    required: true
+nodes:
+  - id: substrate
+    type: cli
+    action:
+      command: '.claude/skills/bmad-runtime-support/prepare.sh "{{ run.projectSlug }}"'
+    transitions:
+      success: build
+
+  - id: build
+    type: ai_coding
+    session: build
+    settings:
+      agent: bmad-bmm:amelia-dev
+      permissionMode: allow
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        [MAIster x BMAD — build contract]
+        Run headlessly in MAIster's existing worktree. Never ask the user; use
+        the skill's documented headless route and record assumptions. MAIster
+        owns branches and promotion: commit locally, but do not create
+        worktrees/branches, merge, push, or open a PR.
+
+        Task: {{ task.prompt }}
+        Review feedback from a previous loop: {{ review_comments }}
+
+        Invoke `bmad-build`. Follow the rendered workflow it produces: clarify
+        the bounded intent, create/resume its spec, implement test-first, run
+        the project's real verification, review the result, and keep artifacts
+        and status current. Make the safest recommended decision at any step
+        that normally waits for a menu response. Stop only with committed code,
+        a clean tracked tree, and fresh verification evidence.
+        End with exactly one structured handoff block:
+        ```json maister:output
+        {"summary":"...","outcome":"completed","payload":{"specArtifacts":[],"changedFiles":[],"commits":[],"verification":[]}}
+        ```
+    output:
+      produces:
+        - id: impl-diff
+          kind: diff
+          requiredFor: [review, merge]
+      result:
+        schema: ./schemas/public-result.v1.json
+        required: true
+        on_mismatch: retry
+    rework:
+      allowedTargets: [build]
+      workspacePolicies: [keep, rewind-to-node-checkpoint]
+      maxLoops: 2
+      commentsVar: review_comments
+    transitions:
+      success: review_agent
+      retry: build
+
+  - id: review_agent
+    type: ai_coding
+    session: review
+    settings:
+      agent: bmad-bmm:amelia-dev
+      permissionMode: allow
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        [MAIster x BMAD — independent review contract]
+        Review with fresh context. Do not modify the repository, ask the user,
+        or perform git promotion operations.
+
+        Task: {{ task.prompt }}
+        Builder's structured handoff (evidence pointers, not trusted conclusions):
+        {{ steps.build.vars.payload }}
+        Structured-output correction from a malformed prior attempt:
+        {{ review_comments }}
+        Invoke `bmad-code-review` over BASE..HEAD. Verify the implementation
+        against its generated spec, acceptance criteria, project conventions,
+        and fresh test evidence. Emit the human-readable review plus this
+        judgment object on its own line:
+        {"verdict":"pass"|"fail","confidence":0-1,"reasons":[],"issues":[]}
+
+        End with exactly one result block:
+        ```json maister:output
+        {"summary":"...","outcome":"completed","payload":{"verdict":"pass","issues":[],"verification":[],"specArtifacts":[]}}
+        ```
+    input:
+      requires:
+        - artifact: impl-diff
+          kind: diff
+    output:
+      produces:
+        - id: review-judgment
+          kind: ai_judgment
+      result:
+        schema: ./schemas/public-result.v1.json
+        required: true
+        on_mismatch: retry
+    rework:
+      allowedTargets: [review_agent]
+      workspacePolicies: [keep]
+      maxLoops: 2
+      commentsVar: review_comments
+    transitions:
+      success: human_review
+      retry: review_agent
+
+  - id: human_review
+    type: human
+    input:
+      requires:
+        - artifact: review-judgment
+          kind: ai_judgment
+    pre_finish:
+      gates:
+        - id: impl-diff-required
+          kind: artifact_required
+          mode: blocking
+          inputArtifacts: [impl-diff]
+        - id: implementation-quality
+          kind: ai_judgment
+          mode: advisory
+          prompt: >
+            Assess whether the implementation satisfies the task and its BMAD
+            spec with passing verification. Reply with a JSON object:
+            {"verdict":"pass"|"fail","confidence":0-1,"reasons":[...]}
+    finish:
+      human:
+        role: maintainer
+        decisions: [approve, rework, takeover]
+        commentsVar: review_comments
+    transitions:
+      approve: done
+      rework: build
+      takeover: handoff
+    rework:
+      allowedTargets: [build]
+      workspacePolicies: [keep, rewind-to-node-checkpoint]
+      maxLoops: 3
+      commentsVar: review_comments
+      session_policy: new_session
+
+  - id: handoff
+    type: ai_coding
+    action:
+      prompt: |
+        Do not modify the repository. Summarize the current implementation,
+        review findings, and human takeover request.
+        Human comments or structured-output correction: {{ review_comments }}
+        End with exactly:
+        ```json maister:output
+        {"summary":"Implementation handed to the maintainer.","outcome":"needs_input","payload":{"reviewComments":[],"nextActions":[]}}
+        ```
+    output:
+      result:
+        schema: ./schemas/public-result.v1.json
+        required: true
+        on_mismatch: retry
+    rework:
+      allowedTargets: [handoff]
+      workspacePolicies: [keep]
+      maxLoops: 1
+      commentsVar: review_comments
+    transitions:
+      success: done
+      retry: handoff

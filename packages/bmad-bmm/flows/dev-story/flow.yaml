@@ -1,14 +1,14 @@
 schemaVersion: 1
 name: bmm-dev-story
 metadata:
-  title: "BMAD — Dev Story (SM → Dev → review)"
-  summary: "BMad Method implementation loop driven by Amelia: prepare a context-rich story -> human approve -> implement test-first -> code review -> human review (approve/rework/takeover). Bounded rework loop; the dev-story checklist + ai_judgment + human review are the quality gates (the project's own test command is run inside the skill, not hardcoded here)."
+  title: "BMAD — Dev Story (v6 compatibility)"
+  summary: "Compatibility flow for the former create-story/dev-story cycle. Existing automation keeps its flow id; new work should use bmm-build, the official BMAD 6.11 implementation loop."
   labels: [implementation, story, dev, tdd, bmad]
   route_when: "Implement the next (or a specified) story end-to-end with test-first discipline and review."
   links:
     - { kind: framework, title: "BMAD Method", url: "https://github.com/bmad-code-org/BMAD-METHOD" }
   sources:
-    - { component: "capability/skills/bmad-{create-story,dev-story,code-review}", origin: "github.com/bmad-code-org/BMAD-METHOD@v6.8.0" }
+    - { component: "capability/skills/bmad-{create-story,dev-story,code-review}", origin: "github.com/bmad-code-org/BMAD-METHOD@v6.11.0" }
 runner_profiles:
   claude-code:
     capability_agent: claude
@@ -22,6 +22,10 @@ compat:
   engine_min: 2.0.0
 defaults:
   session_policy: resume
+requirements:
+  - name: "uv with Python 3.11+"
+    probe: "command -v uv"
+    hint: "install uv and ensure Python 3.11 or newer is available"
 # M42 (ADR-114): Amelia drives every node, but each phase runs in its OWN session
 # so context stays clean — story authoring (`default`), implementation (`dev`),
 # fresh-eyes code review (`code_review`), and rework (`fix`). All inherit the
@@ -37,23 +41,7 @@ nodes:
   - id: substrate
     type: cli
     action:
-      command: |
-        set -e
-        mkdir -p _bmad/bmm docs/planning-artifacts docs/implementation-artifacts
-        if [ ! -f _bmad/bmm/config.yaml ]; then
-          printf '%s\n' \
-            'project_name: "{{ run.projectSlug }}"' \
-            'user_name: "MAIster"' \
-            'communication_language: "English"' \
-            'document_output_language: "English"' \
-            'user_skill_level: "expert"' \
-            'output_folder: "_bmad-output"' \
-            'planning_artifacts: "docs/planning-artifacts"' \
-            'implementation_artifacts: "docs/implementation-artifacts"' \
-            'project_knowledge: "docs"' \
-            > _bmad/bmm/config.yaml
-        fi
-        echo "[bmm substrate] _bmad/bmm/config.yaml ready"
+      command: '.claude/skills/bmad-runtime-support/prepare.sh "{{ run.projectSlug }}"'
     transitions:
       success: create_story
 

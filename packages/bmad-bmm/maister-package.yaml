@@ -3,30 +3,28 @@
 # package-root-relative; the version pin is the git tag (bmad-bmm/vX.Y.Z), never
 # a field in this file.
 #
-# NOTE: the upstream BMAD Method version this package vendors (v6.8.0, the BMM
+# NOTE: the upstream BMAD Method version this package vendors (v6.11.0, the BMM
 # module) is recorded in metadata.sources and pinned in the README — it is
 # independent of this package's own git tag.
 schemaVersion: 1
 name: bmad-bmm
 metadata:
   title: "BMAD Method — Core SDLC (BMM)"
-  summary: "BMAD Method v6 BMM module as MAIster flows: the 4-phase agile SDLC (analysis → planning → solutioning → implementation). Six personas (Mary/Analyst, Paige/Tech-writer, John/PM, Sally/UX, Winston/Architect, Amelia/Dev) ship as platform agents bound to ai_coding nodes; the bmm-* flows wire them with human review gates. Vendored BMM skills drive the work."
+  summary: "BMAD Method v6.11.0 as MAIster flows for planning, the current Build loop, and compatibility entry points. Five upstream personas ship as platform agents; 44 upstream skills plus version-matched runtime support drive the work."
   links:
     - { kind: framework, title: "BMAD Method", url: "https://github.com/bmad-code-org/BMAD-METHOD" }
-    - { kind: docs, title: "BMAD Method v6.8.0 release", url: "https://github.com/bmad-code-org/BMAD-METHOD/releases/tag/v6.8.0" }
+    - { kind: docs, title: "BMAD Method v6.11.0 release", url: "https://github.com/bmad-code-org/BMAD-METHOD/releases/tag/v6.11.0" }
   sources:
-    - { component: "capability/skills/* (BMM workflow skills) + agents/* (personas derived from bmm-skills agent customize.toml)", origin: "github.com/bmad-code-org/BMAD-METHOD@v6.8.0" }
-    - { component: "capability/reference/LICENSE.bmad", origin: "github.com/bmad-code-org/BMAD-METHOD@v6.8.0 (MIT, © BMad Code, LLC)" }
+    - { component: "capability/skills/* (44 upstream workflow/core/shim skills) + maister-agents/* (five upstream personas)", origin: "github.com/bmad-code-org/BMAD-METHOD@v6.11.0 (9ce3c397c9b238de96f7365da8019f6f66b059da)" }
+    - { component: "capability/skills/bmad-runtime-support + capability/reference/LICENSE.bmad", origin: "github.com/bmad-code-org/BMAD-METHOD@v6.11.0 scripts and MIT license" }
 flows:
   - { id: bmm-plan, path: flows/plan }
+  - { id: bmm-build, path: flows/build }
   - { id: bmm-dev-story, path: flows/dev-story }
   - { id: bmm-quick-dev, path: flows/quick-dev }
-# The whole capability/ subtree ships; only capability/skills/ + capability/agents/
-# are materialized into the run worktree's .claude/ (capability/reference/* is
-# stored for provenance only — NOT materialized). The 6 platform agents live at
-# the package-root agents/ dir and are auto-scanned into the catalog at install.
+# capability/skills is materialized into `.claude/skills/`; reference/ remains
+# provenance-only. Platform agents are indexed from package-root maister-agents/.
 capabilities:
   - { id: bmm-bundle, path: capability }
-# BMM is driven by the vendored skills + the bound agent persona, not an MCP
-# server or external CLI. None shipped.
+# BMM is driven by vendored skills, `uv`, and the bound agent persona.
 mcps: []

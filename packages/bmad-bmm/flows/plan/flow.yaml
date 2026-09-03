@@ -2,13 +2,13 @@ schemaVersion: 1
 name: bmm-plan
 metadata:
   title: "BMAD — Plan (greenfield SDLC)"
-  summary: "BMad Method planning spine: product brief (Mary) -> PRD (John) -> UX (Sally) -> architecture (Winston) -> epics+stories (Winston) -> implementation-readiness. Human review gates after the brief, PRD, and architecture; doc-production enforced by command_check gates."
+  summary: "BMad Method 6.11 planning spine: brief -> PRD -> UX -> architecture spine -> epics and stories -> sprint planning/readiness -> final human approve, rework, or defer."
   labels: [planning, prd, architecture, greenfield, bmad]
   route_when: "Plan a new feature/product end-to-end (brief -> PRD -> architecture -> epics) before any code."
   links:
     - { kind: framework, title: "BMAD Method", url: "https://github.com/bmad-code-org/BMAD-METHOD" }
   sources:
-    - { component: "capability/skills/bmad-{product-brief,prd,ux,create-architecture,create-epics-and-stories,check-implementation-readiness}", origin: "github.com/bmad-code-org/BMAD-METHOD@v6.8.0" }
+    - { component: "capability/skills/bmad-{product-brief,prd,ux,architecture,create-epics-and-stories,sprint-planning}", origin: "github.com/bmad-code-org/BMAD-METHOD@v6.11.0" }
 runner_profiles:
   claude-code:
     capability_agent: claude
@@ -19,7 +19,7 @@ runner_profiles:
 # settings.agent binding (M34) -> engine_min >= 1.5.0; typed artifacts (1.2.0),
 # retry/session policies (1.4.0); first-class sessions (M42, ADR-114) -> >= 2.0.0.
 compat:
-  engine_min: 2.0.0
+  engine_min: 3.7.0
 defaults:
   session_policy: resume
 # M42 (ADR-114): each planning persona runs in its OWN session so one persona's
@@ -38,31 +38,20 @@ sessions:
   architecture: { runner: claude-code }
 verdict_calibration:
   confidence_min: 0.7
+requirements:
+  - name: "uv with Python 3.11+"
+    probe: "command -v uv"
+    hint: "install uv and ensure Python 3.11 or newer is available"
+result:
+  export:
+    schema: ./schemas/public-result.v1.json
+    from: [readiness, deferred]
+    required: true
 nodes:
-  # Deterministic mini-substrate: write _bmad/bmm/config.yaml (idempotent) so the
-  # vendored BMad skills can load their config. A cli node runs `bash -c` in the
-  # worktree (cwd = worktreePath) — no agent, no permission HITL. project_name is
-  # Mustache-rendered before bash runs.
   - id: substrate
     type: cli
     action:
-      command: |
-        set -e
-        mkdir -p _bmad/bmm docs/planning-artifacts docs/implementation-artifacts
-        if [ ! -f _bmad/bmm/config.yaml ]; then
-          printf '%s\n' \
-            'project_name: "{{ run.projectSlug }}"' \
-            'user_name: "MAIster"' \
-            'communication_language: "English"' \
-            'document_output_language: "English"' \
-            'user_skill_level: "expert"' \
-            'output_folder: "_bmad-output"' \
-            'planning_artifacts: "docs/planning-artifacts"' \
-            'implementation_artifacts: "docs/implementation-artifacts"' \
-            'project_knowledge: "docs"' \
-            > _bmad/bmm/config.yaml
-        fi
-        echo "[bmm substrate] _bmad/bmm/config.yaml ready"
+      command: '.claude/skills/bmad-runtime-support/prepare.sh "{{ run.projectSlug }}"'
     transitions:
       success: brief
 
@@ -221,7 +210,7 @@ nodes:
         You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree. AskUserQuestion is DISABLED — never ask the user; corrections arrive via the HITL review gates. Commit locally only; do NOT merge/push/PR. Inside any BMad skill, skip its activation/greet/menu steps and execute the <workflow> body. Load config from _bmad/bmm/config.yaml.
 
         THIS NODE — Produce the architecture from the PRD (and UX):
-        - Read the PRD and UX spec under docs/planning-artifacts/. Drive the `bmad-create-architecture` skill autonomously to write a complete architecture document under docs/planning-artifacts/architecture.md (stack, structure, decisions with trade-offs). No placeholders.
+        - Read the PRD and UX spec under docs/planning-artifacts/. Drive the `bmad-architecture` skill on its Fast/headless path to write an architecture spine under docs/planning-artifacts/architecture.md. Record invariants, binding decisions, trade-offs, and explicit deferred items; no placeholders.
         - Commit locally (e.g. "docs(bmad): architecture"). STOP after the architecture — the next node reviews it.
 
         Reviewer feedback from a prior arch_review (empty on first pass):
@@ -307,11 +296,15 @@ nodes:
         [MAIster x BMAD — execution contract]
         You run NON-INTERACTIVELY inside MAIster, in an isolated git worktree. AskUserQuestion is DISABLED — never ask the user. Commit locally only; do NOT merge/push/PR. Inside any BMad skill, skip its activation/greet/menu steps and execute the <workflow> body. Load config from _bmad/bmm/config.yaml.
 
-        THIS NODE — Implementation-readiness assessment:
-        - Drive the `bmad-check-implementation-readiness` skill autonomously to verify the PRD, UX, architecture, and epics under docs/planning-artifacts/ are aligned and implementation-ready. Fix small gaps in the planning docs where safe and commit them.
+        THIS NODE — Sprint planning and implementation-readiness assessment:
+        - Drive the `bmad-sprint-planning` skill autonomously to validate alignment among the PRD, UX, architecture, and epics, then create or update docs/implementation-artifacts/sprint-status.yaml. Fix small planning gaps where safe and commit them.
         - Emit the machine verdict as a single JSON object on its own line:
           {"verdict":"pass"|"fail","confidence":0-1,"reasons":[...]}
         - Also write the full readiness assessment to your output.
+        - End with exactly one result block:
+          ```json maister:output
+          {"summary":"...","outcome":"completed","payload":{"planningArtifacts":[],"sprintStatus":"docs/implementation-artifacts/sprint-status.yaml","readiness":{"verdict":"pass","reasons":[]}}}
+          ```
     input:
       requires:
         - artifact: epics-doc
@@ -330,5 +323,59 @@ nodes:
       produces:
         - id: readiness-judgment
           kind: ai_judgment
+      result:
+        schema: ./schemas/public-result.v1.json
+        required: true
+        on_mismatch: retry
+    rework:
+      allowedTargets: [readiness]
+      workspacePolicies: [keep, rewind-to-node-checkpoint]
+      maxLoops: 2
+      commentsVar: arch_comments
+    transitions:
+      success: final_review
+      retry: readiness
+
+  - id: final_review
+    type: human
+    input:
+      requires:
+        - artifact: readiness-judgment
+          kind: ai_judgment
+    finish:
+      human:
+        role: product-owner
+        decisions: [approve, rework, defer]
+        commentsVar: arch_comments
+    transitions:
+      approve: done
+      rework: architecture
+      defer: deferred
+    rework:
+      allowedTargets: [architecture]
+      workspacePolicies: [keep, rewind-to-node-checkpoint]
+      maxLoops: 3
+      commentsVar: arch_comments
+
+  - id: deferred
+    type: ai_coding
+    action:
+      prompt: |
+        Do not modify the repository. Summarize the human decision to defer this
+        plan and the inputs required to resume. End with exactly:
+        ```json maister:output
+        {"summary":"Planning deferred by the human gate.","outcome":"needs_input","payload":{"resumeRequirements":[]}}
+        ```
+    output:
+      result:
+        schema: ./schemas/public-result.v1.json
+        required: true
+        on_mismatch: retry
+    rework:
+      allowedTargets: [deferred]
+      workspacePolicies: [keep]
+      maxLoops: 1
+      commentsVar: arch_comments
     transitions:
       success: done
+      retry: deferred
