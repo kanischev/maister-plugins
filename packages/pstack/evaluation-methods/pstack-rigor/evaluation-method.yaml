@@ -1,0 +1,155 @@
+schemaVersion: 1
+id: pstack-rigor
+name: pstack Rigor
+description: >-
+  Evaluates whether engineering work is grounded in direct evidence, solves the
+  actual problem with the smallest justified change, and is independently
+  verified rather than merely asserted.
+
+modes:
+  - absolute
+  - n_way
+
+groundTruth:
+  required: true
+  description: >-
+    The frozen task, acceptance criteria, repository evidence, and recorded
+    verification outcomes are the shared ground truth for every judge.
+
+evidence:
+  captureBudgetBytes: 4000000
+  requiredCoverage:
+    - task
+    - source_manifest
+    - diff
+    - gates
+    - artifacts
+  description: >-
+    Use bounded, commit-anchored evidence. Treat missing runtime or visual proof
+    as insufficient evidence; never infer success from source appearance.
+
+objectiveChecks:
+  - id: gates
+    provider: gate_result@1
+    policy: metric
+    description: Recorded blocking and advisory gate outcomes.
+  - id: artifacts
+    provider: artifact_completeness@1
+    policy: metric
+    description: Presence of the Flow's required evidence artifacts.
+  - id: contracts
+    provider: schema_contract@1
+    policy: metric
+    description: Validation of declared output and artifact contracts.
+  - id: diff-stats
+    provider: diff_stats@1
+    policy: metric
+    description: Source and diff size used to assess change discipline.
+
+criteria:
+  - id: problem-understanding
+    name: Problem understanding
+    weight: 0.25
+    scale: { min: 0, max: 5 }
+    naPolicy: insufficient_evidence
+    anchors:
+      - {
+          score: 0,
+          label: "Acts on an unsupported assumption or the wrong problem",
+        }
+      - {
+          score: 3,
+          label: "Understands the main path but leaves material uncertainty",
+        }
+      - {
+          score: 5,
+          label: "Traces the relevant path and resolves decisive uncertainty",
+        }
+  - id: evidence-quality
+    name: Evidence quality
+    weight: 0.25
+    scale: { min: 0, max: 5 }
+    naPolicy: insufficient_evidence
+    anchors:
+      - { score: 0, label: "Claims success without reproducible evidence" }
+      - {
+          score: 3,
+          label: "Provides useful but incomplete or indirect evidence",
+        }
+      - {
+          score: 5,
+          label: "Provides direct, reproducible before-and-after evidence",
+        }
+  - id: change-discipline
+    name: Change discipline
+    weight: 0.20
+    scale: { min: 0, max: 5 }
+    naPolicy: insufficient_evidence
+    anchors:
+      - {
+          score: 0,
+          label: "Introduces unrelated work or gratuitous complexity",
+        }
+      - { score: 3, label: "Mostly scoped, with avoidable surface area" }
+      - { score: 5, label: "Makes the smallest complete and idiomatic change" }
+  - id: correctness
+    name: Demonstrated correctness
+    weight: 0.20
+    scale: { min: 0, max: 5 }
+    naPolicy: insufficient_evidence
+    anchors:
+      - {
+          score: 0,
+          label: "Evidence shows failure or contradicts the requested behavior",
+        }
+      - { score: 3, label: "Core behavior works, with residual risk or gaps" }
+      - {
+          score: 5,
+          label: "Behavior is corroborated by appropriate independent checks",
+        }
+  - id: communication
+    name: Decision-useful communication
+    weight: 0.10
+    scale: { min: 0, max: 5 }
+    naPolicy: insufficient_evidence
+    anchors:
+      - { score: 0, label: "Hides uncertainty or obscures the outcome" }
+      - { score: 3, label: "Reports the outcome but misses useful caveats" }
+      - {
+          score: 5,
+          label: "States outcome, evidence, uncertainty, and next decision clearly",
+        }
+
+caps:
+  totalMax: 5
+
+judges:
+  roles:
+    - id: rigorous-reviewer
+      name: Independent rigorous reviewer
+      count: 3
+      promptTemplate: prompts/judge.md
+      description: >-
+        A blind reviewer scoring one participant against the pstack rubric and
+        the same frozen evidence snapshot.
+  resultSchema: schemas/judge-result.schema.json
+
+aggregation:
+  algorithm: weighted_mean@1
+
+panelPolicy:
+  quorum: 2
+  timeoutSeconds: 900
+  maxRetries: 1
+  onInvalidOutput: repair_then_exclude
+  onMissingJudge: exclude
+  disagreement:
+    scoreSpreadThreshold: 1.5
+    confidenceSpreadThreshold: 0.4
+    escalateOnConflict: true
+
+report:
+  primaryView: scoreboard
+
+compat:
+  engine_min: 3.7.0

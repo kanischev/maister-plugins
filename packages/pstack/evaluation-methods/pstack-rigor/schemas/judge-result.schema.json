@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "pstack rigor judge result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["criteria"],
+  "properties": {
+    "summary": { "type": "string" },
+    "criteria": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["criterionId", "state"],
+        "properties": {
+          "criterionId": {
+            "type": "string",
+            "enum": [
+              "problem-understanding",
+              "evidence-quality",
+              "change-discipline",
+              "correctness",
+              "communication"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": ["scored", "insufficient_evidence", "not_applicable"]
+          },
+          "score": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "maximum": 5
+          },
+          "rationale": { "type": "string" },
+          "confidence": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "maximum": 1
+          },
+          "evidenceRefs": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "objectiveRefs": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

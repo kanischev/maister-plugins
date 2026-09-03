@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "fields": [
+    { "name": "summary", "type": "string", "required": true },
+    {
+      "name": "outcome",
+      "type": "enum",
+      "required": true,
+      "options": ["completed", "blocked", "needs_input"]
+    },
+    { "name": "findings", "type": "json", "required": true },
+    { "name": "evidence", "type": "json", "required": true },
+    { "name": "gaps", "type": "json", "required": false }
+  ]
+}

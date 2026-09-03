@@ -1,0 +1,46 @@
+# MAIster package manifest. Flow orchestration is native to MAIster; the
+# capability directory preserves the upstream pstack skills and agents.
+schemaVersion: 1
+name: pstack
+metadata:
+  title: "pstack"
+  summary: "Evidence-first engineering flows for investigation, delivery, refactoring, performance, prototyping, and visual parity, backed by the vendored pstack skill set."
+  links:
+    - {
+        kind: framework,
+        title: "pstack",
+        url: "https://github.com/cursor/plugins/tree/main/pstack",
+      }
+    - {
+        kind: docs,
+        title: "pstack guide",
+        url: "https://github.com/cursor/plugins/tree/main/pstack/docs/guide",
+      }
+  sources:
+    - {
+        component: "skills/*, agents/*",
+        origin: "github.com/cursor/plugins@7314f723a487ec406b6369fe5865ba034cfed166 (pstack 0.14.8)",
+      }
+flows:
+  - { id: pstack-investigate, path: flows/investigate }
+  - { id: pstack-bugfix, path: flows/bugfix }
+  - { id: pstack-feature, path: flows/feature }
+  - { id: pstack-interrogate, path: flows/interrogate }
+  - { id: pstack-refactor, path: flows/refactor }
+  - { id: pstack-perf, path: flows/perf }
+  - { id: pstack-prototype, path: flows/prototype }
+  - { id: pstack-visual-parity, path: flows/visual-parity }
+capabilities:
+  - { id: pstack-bundle, path: capability }
+mcps: []
+evaluationMethods:
+  - { id: pstack-rigor, path: evaluation-methods/pstack-rigor }
+result_profiles:
+  investigation:
+    schema: ./schemas/investigation-result.v1.json
+  candidate:
+    schema: ./schemas/candidate-result.v1.json
+  review:
+    schema: ./schemas/review-result.v1.json
+  verification:
+    schema: ./schemas/verification-result.v1.json

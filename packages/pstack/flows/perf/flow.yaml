@@ -1,0 +1,165 @@
+schemaVersion: 1
+name: pstack-perf
+metadata:
+  title: "pstack — Performance"
+  summary: "Measured performance improvement from reproducible baseline through causal change and independent before/after verification."
+  labels: [performance, profiling, benchmark]
+  route_when: "A measured latency, throughput, memory, CPU, or responsiveness problem needs improvement."
+  links:
+    - {
+        kind: framework,
+        title: "pstack performance playbook",
+        url: "https://github.com/cursor/plugins/blob/main/pstack/skills/poteto-mode/playbooks/perf-issue.md",
+      }
+runner_profiles:
+  primary:
+    capability_agent: claude
+    effort: high
+  independent:
+    capability_agent: codex
+    effort: high
+compat:
+  engine_min: 3.7.0
+defaults:
+  session_policy: resume
+sessions:
+  baseline: { runner: independent }
+  improve: { runner: primary }
+  measure: { runner: independent }
+  finalize: { runner: primary }
+nodes:
+  - id: baseline
+    type: ai_coding
+    session: baseline
+    action:
+      prompt: |
+        [MAIster x pstack execution contract]
+        Work non-interactively in the current MAIster worktree. Do not ask
+        questions, use Cursor-native orchestration, create/switch worktrees or
+        branches, push, merge, or open a PR.
+
+        Establish a reproducible performance baseline for: {{ task.prompt }}
+
+        Follow pstack's performance and runtime-forensics guidance. Define the
+        metric, workload, environment, sample count, variance, and target before
+        changing production code. Profile the actual hot path and record raw
+        commands and results. Add only a reusable benchmark harness when needed.
+        Do not optimize in this node.
+    output:
+      produces:
+        - { id: performance-baseline, kind: test_report, current: true }
+        - { id: profile-evidence, kind: generic_file, current: true }
+    transitions:
+      success: improve
+
+  - id: improve
+    type: ai_coding
+    session: improve
+    action:
+      prompt: |
+        Improve {{ task.prompt }} using the measured baseline and profile. State
+        one causal hypothesis, test the smallest change, and reject changes that
+        do not beat noise. Use pstack `blast-radius`, `no-comments`, and
+        applicable performance principles. Preserve correctness and avoid
+        benchmark-only special cases. Do not commit or perform branch/PR
+        operations.
+
+        Rework feedback, if present: {{ review_comments }}
+    input:
+      requires:
+        - { artifact: performance-baseline, kind: test_report, inline: true }
+        - { artifact: profile-evidence, kind: generic_file }
+    output:
+      produces:
+        - {
+            id: impl-diff,
+            kind: diff,
+            current: true,
+            requiredFor: [review, merge],
+          }
+    transitions:
+      success: measure
+
+  - id: measure
+    type: judge
+    session: measure
+    action:
+      prompt: |
+        Independently re-run the identical baseline workload and correctness
+        checks without editing code. Compare distributions, not a single lucky
+        sample. Fail when improvement is within noise, the requested target is
+        missed, or correctness regresses. End with one fenced
+        `json maister:output` object:
+        {
+          "verdict": "pass" | "fail" | "blocked",
+          "summary": "...",
+          "commands": [],
+          "evidence": {}
+        }
+    input:
+      requires:
+        - { artifact: performance-baseline, kind: test_report, inline: true }
+        - { artifact: impl-diff, kind: diff }
+    output:
+      result:
+        schema: ./schemas/verification-result.v1.json
+        required: true
+        on_mismatch: retry
+      produces:
+        - { id: performance-comparison, kind: test_report, current: true }
+    decide:
+      from: output.verdict
+    transitions:
+      pass: approval
+      fail: improve
+      blocked: approval
+      exhausted: approval
+    rework:
+      allowedTargets: [improve]
+      workspacePolicies: [keep]
+      maxLoops: 4
+      session_policy: new_session
+      commentsVar: review_comments
+      onExhaustion: exhausted
+
+  - id: approval
+    type: human
+    input:
+      requires:
+        - { artifact: performance-baseline, kind: test_report }
+        - { artifact: performance-comparison, kind: test_report }
+        - { artifact: impl-diff, kind: diff }
+    finish:
+      human:
+        role: maintainer
+        decisions: [approve, rework, takeover]
+        commentsVar: review_comments
+    transitions:
+      approve: finalize
+      rework: improve
+      takeover: measure
+    rework:
+      allowedTargets: [improve]
+      workspacePolicies: [keep, rewind-to-node-checkpoint]
+      maxLoops: 3
+      session_policy: new_session
+      commentsVar: review_comments
+      resetTargets: [measure]
+
+  - id: finalize
+    type: ai_coding
+    session: finalize
+    action:
+      prompt: |
+        Re-run the benchmark and correctness checks once more. Commit all
+        requested tracked changes locally with a conventional `perf:` commit.
+        Do not push, merge, open a PR, switch branches, or remove the worktree;
+        MAIster owns promotion. Stop with a clean tracked worktree.
+    pre_finish:
+      gates:
+        - id: tree-clean
+          kind: command_check
+          mode: blocking
+          command: 'test -z "$(git status --porcelain --untracked-files=no)"'
+    transitions:
+      success: done

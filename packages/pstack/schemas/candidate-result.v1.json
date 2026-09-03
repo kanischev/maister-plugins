@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "fields": [
+    { "name": "summary", "type": "string", "required": true },
+    {
+      "name": "decision",
+      "type": "enum",
+      "required": true,
+      "options": ["adopt", "discard", "needs_input"]
+    },
+    { "name": "candidates", "type": "json", "required": true },
+    { "name": "evidence", "type": "json", "required": true }
+  ]
+}

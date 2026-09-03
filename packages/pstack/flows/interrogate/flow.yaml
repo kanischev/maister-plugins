@@ -1,0 +1,105 @@
+schemaVersion: 1
+name: pstack-interrogate
+metadata:
+  title: "pstack — Interrogate"
+  summary: "Evidence-grounded requirement interrogation with a MAIster-native human answer gate and a structured decision brief."
+  labels: [requirements, clarification, hitl]
+  route_when: "A task is materially ambiguous and the right questions must be derived from the repository before implementation."
+  links:
+    - {
+        kind: framework,
+        title: "pstack interrogate skill",
+        url: "https://github.com/cursor/plugins/tree/main/pstack/skills/interrogate",
+      }
+runner_profiles:
+  primary:
+    capability_agent: claude
+    effort: high
+  independent:
+    capability_agent: codex
+    effort: high
+compat:
+  engine_min: 3.7.0
+defaults:
+  session_policy: resume
+sessions:
+  interrogate: { runner: primary }
+  resolve: { runner: independent }
+result:
+  export:
+    schema: ./schemas/investigation-result.v1.json
+    from: [resolve]
+    required: true
+nodes:
+  - id: interrogate
+    type: ai_coding
+    session: interrogate
+    action:
+      prompt: |
+        [MAIster x pstack execution contract]
+        Work non-interactively and read-only. Do not call AskQuestion, spawn
+        Cursor Task subagents, use /loop or pstack global model rules, modify the
+        workspace, or perform git/PR/network side effects.
+
+        Interrogate: {{ task.prompt }}
+
+        Use the pstack `interrogate`, `how`, `why`, and `blast-radius` skills to
+        inspect the repository before forming questions. Separate decisions that
+        truly change scope or behavior from facts the code already answers.
+        Produce a short decision brief with: established facts, assumptions,
+        at most seven prioritized questions, concrete options and consequences,
+        and your recommended default for each question.
+    output:
+      produces:
+        - { id: question-set, kind: human_note, current: true }
+    transitions:
+      success: answers
+
+  - id: answers
+    type: human
+    input:
+      requires:
+        - { artifact: question-set, kind: human_note }
+    finish:
+      human:
+        role: maintainer
+        decisions: [answer, accept_defaults]
+        commentsVar: interrogation_answers
+    transitions:
+      answer: resolve
+      accept_defaults: resolve
+
+  - id: resolve
+    type: judge
+    session: resolve
+    action:
+      prompt: |
+        Turn the repository-grounded question set and the maintainer response
+        into a decision-ready brief. Stay read-only. Resolve explicit answers;
+        when defaults were accepted, use only the defaults already recommended.
+        Preserve unresolved uncertainty. End with one fenced
+        `json maister:output` object:
+        {
+          "summary": "...",
+          "outcome": "completed" | "blocked" | "needs_input",
+          "findings": {},
+          "evidence": {},
+          "gaps": {}
+        }
+
+        Maintainer response: {{ interrogation_answers }}
+    input:
+      requires:
+        - { artifact: question-set, kind: human_note, inline: true }
+    output:
+      result:
+        schema: ./schemas/investigation-result.v1.json
+        required: true
+        on_mismatch: retry
+    rework:
+      allowedTargets: [resolve]
+      workspacePolicies: [keep]
+      maxLoops: 2
+      commentsVar: review_comments
+    transitions:
+      success: done

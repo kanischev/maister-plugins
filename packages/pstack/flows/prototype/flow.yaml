@@ -1,0 +1,147 @@
+schemaVersion: 1
+name: pstack-prototype
+metadata:
+  title: "pstack — Prototype"
+  summary: "Throwaway, artifact-scoped prototype that answers a named decision without contaminating the repository."
+  labels: [prototype, experiment, decision]
+  route_when: "A cheap executable sketch can resolve a design or behavior fork before production implementation."
+  links:
+    - {
+        kind: framework,
+        title: "pstack prototype playbook",
+        url: "https://github.com/cursor/plugins/blob/main/pstack/skills/poteto-mode/playbooks/prototype.md",
+      }
+runner_profiles:
+  primary:
+    capability_agent: claude
+    effort: high
+  independent:
+    capability_agent: codex
+    effort: high
+compat:
+  engine_min: 3.7.0
+defaults:
+  session_policy: resume
+sessions:
+  design: { runner: primary }
+  build: { runner: primary }
+  evaluate: { runner: independent }
+result:
+  export:
+    schema: ./schemas/candidate-result.v1.json
+    from: [evaluate]
+    required: true
+nodes:
+  - id: design
+    type: consensus
+    prompt: |
+      [MAIster x pstack execution contract]
+      Work non-interactively and read-only. Do not ask questions, edit the
+      repository, invoke Cursor Task subagents or /loop, use global pstack model
+      rules, or perform git/PR/network side effects.
+
+      Define the cheapest prototype that can decide: {{ task.prompt }}
+
+      Follow pstack's prototype playbook. Name the exact decision, competing
+      candidates, decisive observation, timebox, fidelity boundary, and discard
+      criteria. The prototype must not masquerade as production code.
+    participants:
+      - { id: experimental-design, runner: primary }
+      - { id: falsification-design, runner: independent }
+    workspace:
+      mode: repo_read
+    material_axes:
+      - decision_is_explicit
+      - observation_is_decisive
+      - prototype_is_disposable
+      - scope_is_timeboxed
+    rounds:
+      mode: iterate
+      max: 2
+    on_no_consensus: escalate
+    synthesizer:
+      runner: primary
+    output:
+      produces:
+        - { id: consensus_plan, kind: plan, current: true }
+        - { id: debate_log, kind: human_note, current: true }
+    transitions:
+      success: build
+
+  - id: build
+    type: ai_coding
+    session: build
+    action:
+      prompt: |
+        Build the approved throwaway experiment from the consensus plan. Write
+        every generated file under `$MAISTER_ARTIFACT_DIR/prototype`; do not
+        modify the repository worktree. Use the smallest fidelity that can
+        produce the decisive observation. Record how to run it, raw results,
+        shortcuts, and invalid uses. Do not commit or perform git/PR operations.
+
+        Rework feedback, if present: {{ review_comments }}
+    input:
+      requires:
+        - { artifact: consensus_plan, kind: plan, inline: true }
+    output:
+      produces:
+        - { id: prototype, kind: preview, current: true }
+        - { id: experiment-log, kind: test_report, current: true }
+    transitions:
+      success: evaluate
+
+  - id: evaluate
+    type: judge
+    session: evaluate
+    action:
+      prompt: |
+        Independently evaluate whether the prototype actually resolves the
+        named decision. Do not repair it or treat prototype code as production
+        quality. Re-run the experiment when possible and identify confounders.
+        End with one fenced `json maister:output` object:
+        {
+          "summary": "...",
+          "decision": "adopt" | "discard" | "needs_input",
+          "candidates": {},
+          "evidence": {}
+        }
+    input:
+      requires:
+        - { artifact: consensus_plan, kind: plan, inline: true }
+        - { artifact: prototype, kind: preview }
+        - { artifact: experiment-log, kind: test_report, inline: true }
+    output:
+      result:
+        schema: ./schemas/candidate-result.v1.json
+        required: true
+        on_mismatch: retry
+      produces:
+        - { id: prototype-evaluation, kind: ai_judgment, current: true }
+    rework:
+      allowedTargets: [evaluate]
+      workspacePolicies: [keep]
+      maxLoops: 2
+      commentsVar: review_comments
+    transitions:
+      success: decision
+
+  - id: decision
+    type: human
+    input:
+      requires:
+        - { artifact: prototype, kind: preview }
+        - { artifact: prototype-evaluation, kind: ai_judgment }
+    finish:
+      human:
+        role: maintainer
+        decisions: [accept_evidence, rework]
+        commentsVar: review_comments
+    transitions:
+      accept_evidence: done
+      rework: build
+    rework:
+      allowedTargets: [build]
+      workspacePolicies: [keep]
+      maxLoops: 3
+      session_policy: new_session
+      commentsVar: review_comments

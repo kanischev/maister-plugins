@@ -1,0 +1,224 @@
+schemaVersion: 1
+name: pstack-bugfix
+metadata:
+  title: "pstack — Bug fix"
+  summary: "Reproduce-first root-cause repair with fresh verification, independent review, bounded rework, and human approval."
+  labels: [bug, regression, root-cause]
+  route_when: "A defect or regression needs a demonstrated root-cause fix."
+  links:
+    - {
+        kind: framework,
+        title: "pstack bug-fix playbook",
+        url: "https://github.com/cursor/plugins/blob/main/pstack/skills/poteto-mode/playbooks/bug-fix.md",
+      }
+runner_profiles:
+  primary:
+    capability_agent: claude
+    effort: high
+  independent:
+    capability_agent: codex
+    effort: high
+compat:
+  engine_min: 3.7.0
+defaults:
+  session_policy: resume
+sessions:
+  diagnose: { runner: primary }
+  implement: { runner: primary }
+  verify: { runner: independent }
+  finalize: { runner: primary }
+nodes:
+  - id: diagnose
+    type: ai_coding
+    session: diagnose
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        [MAIster x pstack execution contract]
+        Work non-interactively in the current MAIster worktree. Do not ask
+        questions, use Cursor Task subagents or /loop, consult pstack global
+        model rules, create/switch worktrees or branches, push, merge, or open a
+        PR. MAIster owns orchestration and promotion.
+
+        Diagnose: {{ task.prompt }}
+
+        Follow the pstack bug-fix playbook and use `why`, `how`,
+        `blast-radius`, and applicable principle skills. Reproduce the symptom
+        first, trace it to the earliest causal boundary, compare a working path,
+        and record one falsifiable root-cause hypothesis. You may add the
+        smallest regression test or diagnostic instrumentation needed, but do
+        not implement the fix in this node.
+    output:
+      produces:
+        - { id: diagnosis, kind: human_note, current: true }
+        - { id: failing-reproduction, kind: test_report, current: true }
+    transitions:
+      success: fix
+
+  - id: fix
+    type: ai_coding
+    session: implement
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        [MAIster x pstack execution contract]
+        Work non-interactively in the current MAIster worktree. Do not ask
+        questions or use Cursor-native orchestration. Do not create/switch
+        worktrees or branches, push, merge, open a PR, or commit yet.
+
+        Implement the smallest root-cause fix for {{ task.prompt }}. Treat the
+        diagnosis and failing reproduction as evidence, not authority: verify
+        them against the repository. Use `tdd`, `blast-radius`, `no-comments`,
+        and relevant principle skills. Preserve unrelated behavior and avoid
+        speculative cleanup.
+
+        Rework feedback, if present: {{ review_comments }}
+    input:
+      requires:
+        - { artifact: diagnosis, kind: human_note, inline: true }
+        - { artifact: failing-reproduction, kind: test_report }
+    output:
+      produces:
+        - {
+            id: impl-diff,
+            kind: diff,
+            current: true,
+            requiredFor: [review, merge],
+          }
+    transitions:
+      success: verify
+
+  - id: verify
+    type: judge
+    session: verify
+    retry_policy:
+      attempts: 2
+      on_errors: [SPAWN, EXECUTOR_UNAVAILABLE, CHECKPOINT, ACP_PROTOCOL]
+      workspace: rewind-to-node-checkpoint
+    action:
+      prompt: |
+        Independently verify the bug fix. Stay read-only: do not repair code.
+        Re-run the original reproduction and the project's relevant tests with
+        fresh commands. Confirm that the regression test would fail without the
+        fix when practical. Inspect the diff for symptom-only patches and
+        untested blast radius. End with one fenced `json maister:output` object:
+        {
+          "verdict": "pass" | "fail" | "blocked",
+          "summary": "...",
+          "commands": [],
+          "evidence": {}
+        }
+    input:
+      requires:
+        - { artifact: impl-diff, kind: diff }
+        - { artifact: failing-reproduction, kind: test_report }
+    output:
+      result:
+        schema: ./schemas/verification-result.v1.json
+        required: true
+        on_mismatch: retry
+      produces:
+        - { id: verification, kind: test_report, current: true }
+    decide:
+      from: output.verdict
+    transitions:
+      pass: review
+      fail: fix
+      blocked: approval
+      exhausted: approval
+    rework:
+      allowedTargets: [fix]
+      workspacePolicies: [keep]
+      maxLoops: 3
+      session_policy: new_session
+      commentsVar: review_comments
+      onExhaustion: exhausted
+
+  - id: review
+    type: judge
+    session: verify
+    action:
+      prompt: |
+        Review the change independently against the task, diagnosis, and fresh
+        verification. Use pstack's `blast-radius`, `no-comments`, `unslop`, and
+        relevant principle rubrics. Do not edit code. Recommend rework for any
+        correctness, regression, security, or evidence gap. End with one fenced
+        `json maister:output` object:
+        {
+          "recommendation": "accept" | "rework",
+          "summary": "...",
+          "issues": [],
+          "evidence": {}
+        }
+    input:
+      requires:
+        - { artifact: impl-diff, kind: diff }
+        - { artifact: verification, kind: test_report, inline: true }
+    output:
+      result:
+        schema: ./schemas/review-result.v1.json
+        required: true
+        on_mismatch: retry
+      produces:
+        - { id: independent-review, kind: ai_judgment, current: true }
+    decide:
+      from: output.recommendation
+    transitions:
+      accept: approval
+      rework: fix
+      exhausted: approval
+    rework:
+      allowedTargets: [fix]
+      workspacePolicies: [keep]
+      maxLoops: 3
+      session_policy: new_session
+      commentsVar: review_comments
+      onExhaustion: exhausted
+
+  - id: approval
+    type: human
+    input:
+      requires:
+        - { artifact: impl-diff, kind: diff }
+        - { artifact: verification, kind: test_report }
+        - { artifact: independent-review, kind: ai_judgment }
+    finish:
+      human:
+        role: maintainer
+        decisions: [approve, rework, takeover]
+        commentsVar: review_comments
+    transitions:
+      approve: finalize
+      rework: fix
+      takeover: verify
+    rework:
+      allowedTargets: [fix]
+      workspacePolicies: [keep, rewind-to-node-checkpoint]
+      maxLoops: 3
+      session_policy: new_session
+      commentsVar: review_comments
+      resetTargets: [verify, review]
+
+  - id: finalize
+    type: ai_coding
+    session: finalize
+    action:
+      prompt: |
+        Run the relevant verification one final time with fresh output. Commit
+        all requested tracked changes locally using a conventional commit. Do
+        not push, merge, open a PR, switch branches, or remove the worktree;
+        MAIster owns promotion. Stop with a clean tracked worktree.
+    pre_finish:
+      gates:
+        - id: tree-clean
+          kind: command_check
+          mode: blocking
+          command: 'test -z "$(git status --porcelain --untracked-files=no)"'
+    transitions:
+      success: done

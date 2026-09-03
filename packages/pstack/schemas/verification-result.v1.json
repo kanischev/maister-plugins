@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "fields": [
+    {
+      "name": "verdict",
+      "type": "enum",
+      "required": true,
+      "options": ["pass", "fail", "blocked"]
+    },
+    { "name": "summary", "type": "string", "required": true },
+    { "name": "commands", "type": "json", "required": true },
+    { "name": "evidence", "type": "json", "required": true }
+  ]
+}

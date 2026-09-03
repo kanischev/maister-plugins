@@ -1,0 +1,167 @@
+schemaVersion: 1
+name: pstack-visual-parity
+metadata:
+  title: "pstack — Visual parity"
+  summary: "Reference capture, constrained UI implementation, objective visual comparison, bounded correction, and human approval."
+  labels: [frontend, visual, parity]
+  route_when: "One UI implementation must match an explicit visual reference at defined states and viewports."
+  links:
+    - {
+        kind: framework,
+        title: "pstack visual-parity playbook",
+        url: "https://github.com/cursor/plugins/blob/main/pstack/skills/poteto-mode/playbooks/visual-parity.md",
+      }
+runner_profiles:
+  primary:
+    capability_agent: claude
+    effort: high
+  independent:
+    capability_agent: codex
+    effort: high
+compat:
+  engine_min: 3.7.0
+defaults:
+  session_policy: resume
+sessions:
+  capture: { runner: independent }
+  implement: { runner: primary }
+  compare: { runner: independent }
+  finalize: { runner: primary }
+nodes:
+  - id: capture
+    type: ai_coding
+    session: capture
+    action:
+      prompt: |
+        [MAIster x pstack execution contract]
+        Work non-interactively. Do not ask questions, use Cursor-native
+        orchestration, create/switch worktrees or branches, push, merge, or open
+        a PR. Do not change product code in this node.
+
+        Establish the visual contract for: {{ task.prompt }}
+
+        Follow pstack's visual-parity playbook. Identify the authoritative
+        reference, route, states, data, fonts, viewports, and animation timing.
+        Capture reproducible reference images with available project browser or
+        screenshot tools and record the exact capture procedure. Fail clearly if
+        the reference cannot be accessed; do not substitute an imagined design.
+    output:
+      produces:
+        - { id: reference-visuals, kind: preview, current: true }
+        - { id: visual-contract, kind: human_note, current: true }
+    transitions:
+      success: implement
+
+  - id: implement
+    type: ai_coding
+    session: implement
+    action:
+      prompt: |
+        Implement the smallest UI change that satisfies the captured visual
+        contract for {{ task.prompt }}. Use pstack `make-bot-ui`, `blast-radius`,
+        `no-comments`, `unslop`, and relevant frontend principles. Match
+        structure and layout before cosmetic tuning; preserve accessibility and
+        existing behavior. Do not commit or perform branch/PR operations.
+
+        Rework feedback, if present: {{ review_comments }}
+    input:
+      requires:
+        - { artifact: reference-visuals, kind: preview }
+        - { artifact: visual-contract, kind: human_note, inline: true }
+    output:
+      produces:
+        - {
+            id: impl-diff,
+            kind: diff,
+            current: true,
+            requiredFor: [review, merge],
+          }
+    transitions:
+      success: compare
+
+  - id: compare
+    type: judge
+    session: compare
+    action:
+      prompt: |
+        Independently render the same states and viewports and compare them to
+        the authoritative references without editing code. Use image diff or
+        equivalent measurable comparison where practical, then inspect material
+        discrepancies, responsive behavior, and accessibility. End with one
+        fenced `json maister:output` object:
+        {
+          "verdict": "pass" | "fail" | "blocked",
+          "summary": "...",
+          "commands": [],
+          "evidence": {}
+        }
+    input:
+      requires:
+        - { artifact: reference-visuals, kind: preview }
+        - { artifact: visual-contract, kind: human_note, inline: true }
+        - { artifact: impl-diff, kind: diff }
+    output:
+      result:
+        schema: ./schemas/verification-result.v1.json
+        required: true
+        on_mismatch: retry
+      produces:
+        - { id: rendered-visuals, kind: preview, current: true }
+        - { id: visual-comparison, kind: test_report, current: true }
+    decide:
+      from: output.verdict
+    transitions:
+      pass: approval
+      fail: implement
+      blocked: approval
+      exhausted: approval
+    rework:
+      allowedTargets: [implement]
+      workspacePolicies: [keep]
+      maxLoops: 5
+      session_policy: new_session
+      commentsVar: review_comments
+      onExhaustion: exhausted
+
+  - id: approval
+    type: human
+    input:
+      requires:
+        - { artifact: reference-visuals, kind: preview }
+        - { artifact: rendered-visuals, kind: preview }
+        - { artifact: visual-comparison, kind: test_report }
+        - { artifact: impl-diff, kind: diff }
+    finish:
+      human:
+        role: maintainer
+        decisions: [approve, rework, takeover]
+        commentsVar: review_comments
+    transitions:
+      approve: finalize
+      rework: implement
+      takeover: compare
+    rework:
+      allowedTargets: [implement]
+      workspacePolicies: [keep, rewind-to-node-checkpoint]
+      maxLoops: 4
+      session_policy: new_session
+      commentsVar: review_comments
+      resetTargets: [compare]
+
+  - id: finalize
+    type: ai_coding
+    session: finalize
+    action:
+      prompt: |
+        Re-run the visual comparison and relevant project checks. Commit all
+        requested tracked changes locally using a conventional commit. Do not
+        push, merge, open a PR, switch branches, or remove the worktree; MAIster
+        owns promotion. Stop with a clean tracked worktree.
+    pre_finish:
+      gates:
+        - id: tree-clean
+          kind: command_check
+          mode: blocking
+          command: 'test -z "$(git status --porcelain --untracked-files=no)"'
+    transitions:
+      success: done

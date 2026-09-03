@@ -20,6 +20,7 @@ packages/
 | Package | Contents |
 | ------- | -------- |
 | [`aif`](packages/aif/) | AI Factory workflows: 5 flows (`aif-dev`, `aif-bugfix`, `aif-evolve`, `aif-roadmap`, `aif-init`) + vendored skills/agents bundle. |
+| [`pstack`](packages/pstack/) | [pstack](https://github.com/cursor/plugins/tree/main/pstack) evidence-first engineering: 8 MAIster-native flows, full vendored skills/agents bundle, typed result profiles, and the `pstack-rigor` Evaluation Method. |
 | [`superpowers`](packages/superpowers/) | [obra/superpowers](https://github.com/obra/superpowers) methodology: 4 flows (`sp-dev`, `sp-debug`, `sp-plan`, `sp-execute`) + full vendored superpowers skills bundle. |
 | [`openspec`](packages/openspec/) | [Fission-AI/OpenSpec](https://github.com/Fission-AI/OpenSpec) spec-driven workflow: 4 flows (`os-dev`, `os-propose`, `os-apply`, `os-init`) driving the `openspec` CLI (installed by `setup.sh` / `os-init`); hybrid `cli`+`ai_coding` nodes, `requirements` launch precondition. Reference-only bundle. |
 | [`core`](packages/core/) | First-party platform agents for task triage, Project Brain improvement, and experiment evaluation, plus shared MAIster skills. |
@@ -34,6 +35,8 @@ packages/
 Per-package reference docs and design specs live under [`docs/`](docs/):
 
 - [`docs/aif/`](docs/aif/) — AIF package reference.
+- [`docs/pstack/`](docs/pstack/) — pstack-to-MAIster architecture mapping and
+  extension boundary.
 - [`docs/superpowers/`](docs/superpowers/) — Superpowers package reference +
   the design spec (`specs/`).
 - [`docs/openspec/`](docs/openspec/) — OpenSpec package reference + the design

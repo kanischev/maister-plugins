@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "fields": [
+    {
+      "name": "recommendation",
+      "type": "enum",
+      "required": true,
+      "options": ["accept", "rework"]
+    },
+    { "name": "summary", "type": "string", "required": true },
+    { "name": "issues", "type": "json", "required": true },
+    { "name": "evidence", "type": "json", "required": true }
+  ]
+}

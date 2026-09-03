@@ -1,0 +1,102 @@
+schemaVersion: 1
+name: pstack-investigate
+metadata:
+  title: "pstack — Investigate"
+  summary: "Read-only, multi-model investigation that separates direct evidence, inference, and remaining uncertainty."
+  labels: [investigation, research, read-only]
+  route_when: "A repository question must be answered deeply without changing code."
+  links:
+    - {
+        kind: framework,
+        title: "pstack investigation playbook",
+        url: "https://github.com/cursor/plugins/blob/main/pstack/skills/poteto-mode/playbooks/investigation.md",
+      }
+runner_profiles:
+  primary:
+    capability_agent: claude
+    effort: high
+  independent:
+    capability_agent: codex
+    effort: high
+compat:
+  engine_min: 3.7.0
+defaults:
+  session_policy: resume
+sessions:
+  publish: { runner: independent }
+result:
+  export:
+    schema: ./schemas/investigation-result.v1.json
+    from: [publish]
+    required: true
+nodes:
+  - id: investigate
+    type: consensus
+    prompt: |
+      [MAIster x pstack execution contract]
+      Work non-interactively and read-only. MAIster owns orchestration and the
+      workspace. Do not ask questions, edit files, invoke Cursor Task
+      subagents or /loop, read pstack model-selection rules, create worktrees or
+      branches, or perform PR/network side effects.
+
+      Investigate: {{ task.prompt }}
+
+      Apply the pstack `how`, `why`, `blast-radius`, and relevant principle
+      skills. Trace the actual code path, test competing explanations, label
+      facts versus inference, cite repository locations and commands, and state
+      what could not be established. A confident answer without direct evidence
+      is disagreement, not consensus.
+    participants:
+      - { id: primary-analysis, runner: primary }
+      - { id: independent-analysis, runner: independent }
+    workspace:
+      mode: repo_read
+    material_axes:
+      - relevant_code_path_traced
+      - claims_have_direct_evidence
+      - alternatives_were_tested
+      - uncertainty_is_explicit
+    rounds:
+      mode: iterate
+      max: 2
+    on_no_consensus: escalate
+    synthesizer:
+      runner: primary
+    output:
+      produces:
+        - { id: consensus_plan, kind: plan, current: true }
+        - { id: debate_log, kind: human_note, current: true }
+    transitions:
+      success: publish
+
+  - id: publish
+    type: judge
+    session: publish
+    action:
+      prompt: |
+        Convert the consensus investigation into a compact public result. Stay
+        read-only and do not add claims unsupported by the supplied artifacts.
+        End with exactly one fenced `json maister:output` object:
+        {
+          "summary": "...",
+          "outcome": "completed" | "blocked" | "needs_input",
+          "findings": {},
+          "evidence": {},
+          "gaps": {}
+        }
+    input:
+      requires:
+        - { artifact: consensus_plan, kind: plan, inline: true }
+        - { artifact: debate_log, kind: human_note, inline: true }
+    output:
+      result:
+        schema: ./schemas/investigation-result.v1.json
+        required: true
+        on_mismatch: retry
+    rework:
+      allowedTargets: [publish]
+      workspacePolicies: [keep]
+      maxLoops: 2
+      commentsVar: review_comments
+    transitions:
+      success: done

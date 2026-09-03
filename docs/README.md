@@ -11,6 +11,7 @@ through `maister.yaml packages[]`, pinned by a per-package git tag
 | Package | Reference | Flows | Capability bundle |
 | ------- | --------- | ----- | ----------------- |
 | `aif` | [aif/](aif/README.md) | `aif-dev`, `aif-bugfix`, `aif-evolve`, `aif-roadmap`, `aif-init` | AI Factory skills + subagents (`github.com/lee-to/ai-factory@2.x`) |
+| `pstack` | [pstack/](pstack/README.md) | `pstack-investigate`, `pstack-interrogate`, `pstack-bugfix`, `pstack-feature`, `pstack-refactor`, `pstack-perf`, `pstack-prototype`, `pstack-visual-parity` | Full pstack `0.14.8` skills + agents (`cursor/plugins@7314f723`) |
 | `superpowers` | [superpowers/](superpowers/README.md) | `sp-dev`, `sp-debug`, `sp-plan`, `sp-execute` | superpowers skills, all 14 (`github.com/obra/superpowers@5.1.0`) |
 | `openspec` | [openspec/](openspec/README.md) | `os-dev`, `os-propose`, `os-apply`, `os-init` | reference-only — drives the `openspec` CLI (`@fission-ai/openspec@1.4.1`, installed by `setup.sh` / `os-init`); ADR-091 `requirements` precondition |
 | `bmad-bmm` | [bmad-bmm/](bmad-bmm/README.md) | `bmm-plan`, `bmm-dev-story`, `bmm-quick-dev` | BMAD Method v6 BMM SDLC: 6 platform-agent personas + 26 vendored BMM skills (`github.com/bmad-code-org/BMAD-METHOD@v6.8.0`) |
