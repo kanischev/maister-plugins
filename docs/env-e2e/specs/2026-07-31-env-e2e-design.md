@@ -8,7 +8,7 @@ consistent with this document. Where this spec corrects the original request
 text, the correction is marked **[grounding]** with the platform-code citation.
 
 Companion platform contract: MAIster
-[ADR-154](https://github.com/albertkanischev/maister) (`MAISTER_FLOW_DIR` for
+[ADR-154](https://github.com/maister-dev/maister) (`MAISTER_FLOW_DIR` for
 cli/check node actions, engine `3.3.0`) + `docs/flow-dsl.md` §"env whitelist +
 secret blocklist" + `docs/system-analytics/flow-graph.md` §Expectations.
 

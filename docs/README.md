@@ -2,7 +2,7 @@
 
 Reference documentation for the MAIster flow packages in this repo. Each
 package is a self-contained distribution unit (flow graphs + capability bundle
-+ manifest) consumed by [MAIster](https://github.com/albertkanischev/maister)
++ manifest) consumed by [MAIster](https://github.com/maister-dev/maister)
 through `maister.yaml packages[]`, pinned by a per-package git tag
 (`<name>/vX.Y.Z`).
 

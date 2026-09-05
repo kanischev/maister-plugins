@@ -1,6 +1,6 @@
 # maister-plugins
 
-Package monorepo for [MAIster](https://github.com/kanischev/mAIster):
+Package monorepo for [MAIster](https://github.com/maister-dev/maister):
 each package is a self-contained distribution unit carrying everything its
 flows or agents need to function — flow graphs, skills, agents, and MCP server
 templates.

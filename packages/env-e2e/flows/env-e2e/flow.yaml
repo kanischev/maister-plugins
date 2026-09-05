@@ -6,7 +6,7 @@ metadata:
   labels: [e2e, verification, quality]
   route_when: "The change must be proven by the project's e2e suite in an isolated compose environment before promotion."
   links:
-    - { kind: docs, title: "Design spec (SSOT)", url: "https://github.com/albertkanischev/maister-plugins/blob/main/docs/env-e2e/specs/2026-07-31-env-e2e-design.md" }
+    - { kind: docs, title: "Design spec (SSOT)", url: "https://github.com/maister-dev/maister-plugins/blob/main/docs/env-e2e/specs/2026-07-31-env-e2e-design.md" }
 runner_profiles:
   claude-code:
     capability_agent: claude
