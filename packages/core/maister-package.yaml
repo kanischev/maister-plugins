@@ -9,8 +9,8 @@ metadata:
   title: "MAIster Core"
   summary: "First-party MAIster platform agents — Triager, Brain Improver, and Experiment Judge — plus shared core skills."
   links:
-    - { kind: docs, title: "Triage domain", url: "https://github.com/maisterhq/maister/blob/main/docs/system-analytics/triage.md" }
-    - { kind: docs, title: "Platform agents", url: "https://github.com/maisterhq/maister/blob/main/docs/system-analytics/agents.md" }
+    - { kind: docs, title: "Triage domain", url: "https://github.com/maister-dev/maister/blob/master/docs/system-analytics/triage.md" }
+    - { kind: docs, title: "Platform agents", url: "https://github.com/maister-dev/maister/blob/master/docs/system-analytics/agents.md" }
 # No flows: the package combines platform agents with a shared skill bundle.
 # Agents are catalogued from maister-agents/<stem>.md under id `core:<stem>`.
 flows: []

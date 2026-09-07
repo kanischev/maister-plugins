@@ -6,7 +6,7 @@ metadata:
   title: "MAIster Core — Java"
   summary: "First-party Java engineering skills for build systems, testing, application architecture, performance, and production diagnostics."
   links:
-    - { kind: docs, title: "MAIster package contract", url: "https://github.com/maisterhq/maister/blob/main/docs/pv/package-management.md" }
+    - { kind: docs, title: "MAIster package contract", url: "https://github.com/maister-dev/maister/blob/master/docs/pv/package-management.md" }
 flows: []
 capabilities:
   - { id: core-java-bundle, path: capability }

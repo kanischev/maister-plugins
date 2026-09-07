@@ -6,7 +6,7 @@ metadata:
   title: "MAIster Core — PostgreSQL"
   summary: "First-party PostgreSQL skills for schema design, migrations, query tuning, indexing, transactions, reliability, and operations."
   links:
-    - { kind: docs, title: "MAIster package contract", url: "https://github.com/maisterhq/maister/blob/main/docs/pv/package-management.md" }
+    - { kind: docs, title: "MAIster package contract", url: "https://github.com/maister-dev/maister/blob/master/docs/pv/package-management.md" }
 flows: []
 capabilities:
   - { id: core-pg-bundle, path: capability }

@@ -6,7 +6,7 @@ metadata:
   title: "MAIster Core — React"
   summary: "First-party React and TypeScript frontend skills for component design, state and data flow, testing, accessibility, and performance."
   links:
-    - { kind: docs, title: "MAIster package contract", url: "https://github.com/maisterhq/maister/blob/main/docs/pv/package-management.md" }
+    - { kind: docs, title: "MAIster package contract", url: "https://github.com/maister-dev/maister/blob/master/docs/pv/package-management.md" }
 flows: []
 capabilities:
   - { id: core-react-bundle, path: capability }

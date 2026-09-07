@@ -6,7 +6,7 @@ metadata:
   title: "MAIster Core — Skill Authoring"
   summary: "First-party skill-authoring skills for designing, structuring, validating, testing, and maintaining reusable MAIster agent skills."
   links:
-    - { kind: docs, title: "MAIster package contract", url: "https://github.com/maisterhq/maister/blob/main/docs/pv/package-management.md" }
+    - { kind: docs, title: "MAIster package contract", url: "https://github.com/maister-dev/maister/blob/master/docs/pv/package-management.md" }
 flows: []
 capabilities:
   - { id: core-skill-authoring-bundle, path: capability }
